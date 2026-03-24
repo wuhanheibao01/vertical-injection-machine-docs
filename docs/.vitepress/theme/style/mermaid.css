@@ -7,8 +7,8 @@
 :root {
   --mermaid-step-bg: #e6f7ff;
   --mermaid-step-border: #1890ff;
-  --mermaid-complete-bg: #f6ffed;
-  --mermaid-complete-border: #52c41a;
+  --mermaid-complete-bg: #f0fff0;
+  --mermaid-complete-border: #32cd32;
   --mermaid-decision-bg: #fffbe6;
   --mermaid-decision-border: #fa8c16;
   --mermaid-loop-bg: #f3e5f5;
@@ -23,8 +23,8 @@
   --mermaid-data-border: #9c27b0;
   --mermaid-app-bg: #e6f7ff;
   --mermaid-app-border: #1890ff;
-  --mermaid-control-bg: #f6ffed;
-  --mermaid-control-border: #52c41a;
+  --mermaid-control-bg: #f0fff0;
+  --mermaid-control-border: #32cd32;
   --mermaid-driver-bg: #fffbe6;
   --mermaid-driver-border: #fa8c16;
   --mermaid-state-bg: #e6f7ff;
@@ -37,7 +37,7 @@ html.dark {
   --mermaid-step-bg: #0c3b5e;
   --mermaid-step-border: #177ddc;
   --mermaid-complete-bg: #1a3d1a;
-  --mermaid-complete-border: #49aa19;
+  --mermaid-complete-border: #4caf50;
   --mermaid-decision-bg: #3d2e0a;
   --mermaid-decision-border: #fa8c16;
   --mermaid-loop-bg: #2d1f3d;
@@ -53,7 +53,7 @@ html.dark {
   --mermaid-app-bg: #0c3b5e;
   --mermaid-app-border: #177ddc;
   --mermaid-control-bg: #1a3d1a;
-  --mermaid-control-border: #49aa19;
+  --mermaid-control-border: #4caf50;
   --mermaid-driver-bg: #3d2e0a;
   --mermaid-driver-border: #fa8c16;
   --mermaid-state-bg: #0c3b5e;
