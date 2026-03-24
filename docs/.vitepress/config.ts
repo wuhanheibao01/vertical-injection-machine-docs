@@ -9,7 +9,7 @@ export default withMermaid(
     description: "宝捷信立式注塑机技术文档与功能整理",
     titleTemplate: ':title - 宝捷信立式注塑机',
     head: [
-      ['link', { rel: 'icon', href: '/favicon.ico' }]
+      ['link', { rel: 'icon', href: '/favicon.svg' }]
     ],
     appearance: true,
     sitemap: {
