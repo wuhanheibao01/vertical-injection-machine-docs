@@ -48,7 +48,7 @@ provide('toggle-appearance', async ({ clientX: x, clientY: y }: MouseEvent) => {
 
 <template>
   <DefaultTheme.Layout v-bind="$attrs">
-    <template #doc-top>
+    <template #doc-before>
       <ArticleMetadata />
     </template>
     <template #doc-footer-before>
