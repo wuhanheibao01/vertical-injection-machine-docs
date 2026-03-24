@@ -1,0 +1,29 @@
+/* 页面元数据样式优化 */
+.VPDoc .ArticleMetadata {
+  padding: 12px 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--vp-c-divider);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.VPDoc .ArticleMetadata .word {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.VPDoc .ArticleMetadata .word p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.VPDoc .ArticleMetadata .icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+}

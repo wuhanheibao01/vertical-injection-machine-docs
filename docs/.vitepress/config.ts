@@ -11,7 +11,7 @@ export default withMermaid(
     head: [
       ['link', { rel: 'icon', href: '/favicon.svg' }]
     ],
-    appearance: true,
+    appearance: 'dark',
     sitemap: {
       hostname: 'http://localhost:5174'
     },
@@ -19,13 +19,15 @@ export default withMermaid(
 
     markdown: {
       lineNumbers: true,
+      lastUpdated: true,
     },
 
     themeConfig: {
       logo: '/logo.png',
       siteTitle: '宝捷信立式注塑机',
       outline: {
-        level: [2, 4]
+        level: [2, 4],
+        label: '当前页大纲'
       },
       search: {
         provider: 'local',
@@ -63,7 +65,7 @@ export default withMermaid(
         { icon: 'github', link: 'https://github.com/wuhanheibao01/vertical-injection-machine-docs' }
       ],
       footer: {
-        message: '基于 VitePress 构建',
+        message: '技术交流：13971612060',
         copyright: `© ${new Date().getFullYear()} 宝捷信立式注塑机技术文档`
       }
     }

@@ -8,6 +8,7 @@ import MouseClick from "./MouseClick.vue";
 import MouseFollower from "./MouseFollower.vue";
 import backtotop from "./backtotop.vue"
 import bsz from "./bsz.vue"
+import ArticleMetadata from "./ArticleMetadata.vue"
 
 const { isDark } = useData()
 
@@ -47,6 +48,9 @@ provide('toggle-appearance', async ({ clientX: x, clientY: y }: MouseEvent) => {
 
 <template>
   <DefaultTheme.Layout v-bind="$attrs">
+    <template #doc-top>
+      <ArticleMetadata />
+    </template>
     <template #doc-footer-before>
       <backtotop />
     </template>
