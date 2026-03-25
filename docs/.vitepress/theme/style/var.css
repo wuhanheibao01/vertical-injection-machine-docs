@@ -787,6 +787,16 @@ code, pre, .vp-code {
 
 
 
+/* 图片懒加载 */
+img.lazy {
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+img {
+  transition: opacity 0.3s ease-in-out;
+}
+
 /* 交互效果增强 */
 
 /* 按钮样式 */
