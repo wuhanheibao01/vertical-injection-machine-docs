@@ -5,10 +5,12 @@ import markdownItTaskCheckbox from 'markdown-it-task-checkbox'
 import { groupIconMdPlugin, groupIconVitePlugin, localIconLoader } from 'vitepress-plugin-group-icons'
 import { MermaidMarkdown, MermaidPlugin } from 'vitepress-plugin-mermaid';
 
-// 直接定义一个空的 rewrites 对象，避免导入模块的问题
-const rewrites = {};
+import { usePosts } from './theme/untils/permalink';
 
-export default defineConfig({
+export default defineConfig(async () => {
+  const { rewrites } = await usePosts();
+
+  return {
   
     lang: 'zh-CN',
     title: "VitePress",
@@ -281,5 +283,5 @@ export default defineConfig({
         next: '下一页',
       },
     },
-  }
+  };
 });
