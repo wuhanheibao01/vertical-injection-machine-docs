@@ -7,6 +7,7 @@ export default withMermaid({
   title: "宝捷信立式注塑机",
   description: "宝捷信立式注塑机技术文档与功能整理",
   titleTemplate: ':title - 宝捷信立式注塑机',
+  base: '/vertical-injection-machine-docs/', // GitHub Pages仓库路径
   head: [
     ['link', { rel: 'icon', href: '/favicon.svg' }],
     // 内联关键CSS，实现首屏优先显示

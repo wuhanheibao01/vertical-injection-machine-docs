@@ -17,7 +17,7 @@ export default defineConfig({
     ],
     // #endregion fav
 
-    base: '/vertical-injection-machine-docs/', //网站部署到github的vertical-injection-machine-docs这个仓库里
+    base: '/vertical-injection-machine-docs/', // GitHub Pages仓库路径
 
     // cleanUrls:true, //开启纯净链接无html
 
