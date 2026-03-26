@@ -70,6 +70,16 @@ export default defineConfig({
       },
     },
 
+    //vite配置
+    vite: {
+      plugins: [
+        groupIconVitePlugin({
+          iconDir: 'docs/public/svg',
+        }),
+        localIconLoader(),
+      ],
+    },
+
     //主题配置
     themeConfig: {
       //站点logo
