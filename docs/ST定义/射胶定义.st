@@ -47,8 +47,10 @@ STRUCT
 	uiInjSegCnt: UINT;						// 射出段数选择   
 	uiInjMode: UINT;						// 射出方式选择 0:电子尺  1:行程  2:时间
 	uiInjTotalTime: UINT;					// 射出总时间
-	uiInjToHoldMode: UINT;					// 转保压方式
- 	uiInjToHoldPres: UINT;					// 转保压压力 
+	uiInjToHoldMode: DWORD;					// 转保压方式（按位组合：Bit0时间 Bit1压力 Bit2位置）
+ 	uiInjToHoldPres: UINT;					// 转保压压力阈值
+	uiInjToHoldPos: UINT;					// 转保压位置阈值
+	uiInjToHoldTime: UINT;					// 转保压时间阈值
 	aInjSeg: ARRAY[1..10] OF ST_InjectSeg;	// 射出多段设定参数
 	
 	uiInjPresStartGrad: UINT;				// 压力启动斜率
