@@ -114,6 +114,13 @@ export default withMermaid({
   themeConfig: {
     logo: '/logo.png',
     siteTitle: '宝捷信立式注塑机',
+    editLink: {
+      repo: 'wuhanheibao01/vertical-injection-machine-docs',
+      repoLabel: '在 GitHub 上编辑此页面',
+      docsDir: 'docs',
+      docsBranch: 'main',
+      editLinkText: '编辑此页'
+    },
     outline: {
       level: [2, 4],
       label: '当前页大纲'
