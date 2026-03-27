@@ -11,6 +11,9 @@ export default defineConfig({
     title: "VitePress",
     description: "我的vitpress文档教程",
 
+    // 忽略死链检查（因为中文文件名在Windows和Git间编码不一致）
+    ignoreDeadLinks: true,
+
     // #region fav
     head: [
       ['link', { rel: 'icon', href: '/logo.png' }],
