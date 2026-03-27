@@ -20,7 +20,7 @@ export default defineConfig({
     ],
     // #endregion fav
 
-    base: '/vertical-injection-machine-docs/', // GitHub Pages仓库路径
+    base: '/inj-machine-docs/', // GitHub Pages仓库路径
 
     // cleanUrls:true, //开启纯净链接无html
 
@@ -244,7 +244,7 @@ export default defineConfig({
 
       //社交链接
       socialLinks: [
-        { icon: 'github', link: 'https://github.com/wuhanheibao01/vertical-injection-machine-docs' },
+        { icon: 'github', link: 'https://github.com/Porcheson/inj-machine-docs' },
         { icon: 'twitter', link: 'https://twitter.com/' },
         { icon: 'discord', link: 'https://chat.vitejs.dev/' },
         {

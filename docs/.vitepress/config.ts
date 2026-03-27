@@ -7,7 +7,7 @@ export default withMermaid({
   title: "宝捷信立式注塑机",
   description: "宝捷信立式注塑机技术文档与功能整理",
   titleTemplate: ':title - 宝捷信立式注塑机',
-  base: '/vertical-injection-machine-docs/',
+  base: '/inj-machine-docs/',
   ignoreDeadLinks: true,
   head: [
     ['link', { rel: 'icon', href: '/favicon.svg' }],
@@ -115,7 +115,7 @@ export default withMermaid({
     logo: '/logo.png',
     siteTitle: '宝捷信立式注塑机',
     editLink: {
-      pattern: 'https://github.com/wuhanheibao01/vertical-injection-machine-docs/edit/main/:path',
+      pattern: 'https://github.com/Porcheson/inj-machine-docs/edit/main/:path',
       text: '在 GitHub 上编辑此页面'
     },
     outline: {
@@ -158,7 +158,7 @@ export default withMermaid({
     }),
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/wuhanheibao01/vertical-injection-machine-docs' }
+      { icon: 'github', link: 'https://github.com/Porcheson/inj-machine-docs' }
     ],
     footer: {
       message: '技术交流：13971612060',
