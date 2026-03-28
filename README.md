@@ -34,8 +34,6 @@
 
 | 技术 | 说明 |
 |------|------|
-| [VitePress](https://vitepress.dev/) | 静态网站生成器 |
-| [Mermaid](https://mermaid.js.org/) | 流程图和时序图绘制 |
 | IEC 61131-3 ST | PLC编程语言标准 |
 | Beremiz/Luban | 开源自动化IDE |
 
