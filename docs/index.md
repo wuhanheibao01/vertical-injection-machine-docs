@@ -27,7 +27,7 @@ features:
     details: 开合模、调模、射出、吹气、储料清料、座台、托模、移模、转盘、中子、绞牙、计时计数、温度、自动流程等完整功能模块
   - icon: 🎯
     title: 技术架构
-    details: 基于Luban平台（Beremiz二次开发），采用IEC 61131-3 ST语法，实现模块化、标准化设计
+    details: 基于Luban平台（https://pan.baidu.com/s/134uu-YZ_6xK4FOy7PBDbXw?pwd=por1），采用IEC 61131-3 ST语法，实现模块化、标准化设计
   - icon: 📊
     title: 数据管理
     details: 详细的参数映射、地址点表和数据结构定义，确保系统稳定运行
@@ -40,10 +40,6 @@ features:
   - icon: 💡
     title: 技术支持
     details: 专业的技术支持和培训，确保设备正常运行和持续优化
-  - icon: 📥
-    title: Luban 下载
-    details: Luban（基于Beremiz）编程工具下载
-    link: https://pan.baidu.com/s/134uu-YZ_6xK4FOy7PBDbXw?pwd=por1
 
 ---
 
