@@ -45,8 +45,8 @@ features:
 
 ## 关于本项目
 
-本项目旨在整理和文档化宝捷信立式注塑机的各项功能和技术细节，为技术人员提供全面、准确的参考资料。
-Luban 下载：https://pan.baidu.com/s/134uu-YZ_6xK4FOy7PBDbXw?pwd=por1
+- **本项目旨在整理和文档化宝捷信立式注塑机的各项功能和技术细节，为技术人员提供全面、准确的参考资料。**
+- **Luban 下载**：https://pan.baidu.com/s/134uu-YZ_6xK4FOy7PBDbXw?pwd=por1
 
 ### 主要内容
 
