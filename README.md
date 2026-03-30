@@ -4,7 +4,12 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-VitePress-blue)](https://vitepress.dev/)
 
-📚 **在线文档**: [https://porcheson.github.io/inj-machine-docs/](https://porcheson.github.io/inj-machine-docs/)
+📚 **在线文档**:
+
+ [https://inj-machine-docs.netlify.app/](https://inj-machine-docs.netlify.app/)
+
+或
+[https://porcheson.github.io/inj-machine-docs/](https://porcheson.github.io/inj-machine-docs/)
 
 📥 **Luban 下载**: [百度网盘](https://pan.baidu.com/s/134uu-YZ_6xK4FOy7PBDbXw) | 提取码: `por1`
 
@@ -16,12 +21,12 @@
 
 ## 🎯 主要内容
 
-| 分类 | 说明 |
-|------|------|
-| 📄 **功能文档** | 详细介绍注塑机的各项功能模块和操作流程 |
-| 🏗️ **技术架构** | 深入解析系统的技术架构和实现原理 |
-| 📊 **数据管理** | 提供完整的参数映射、地址点表和数据结构定义 |
-| 🔧 **调试指南** | 帮助技术人员快速排查和解决问题 |
+| 分类                   | 说明                                       |
+| ---------------------- | ------------------------------------------ |
+| 📄**功能文档**   | 详细介绍注塑机的各项功能模块和操作流程     |
+| 🏗️**技术架构** | 深入解析系统的技术架构和实现原理           |
+| 📊**数据管理**   | 提供完整的参数映射、地址点表和数据结构定义 |
+| 🔧**调试指南**   | 帮助技术人员快速排查和解决问题             |
 
 ## ⚡ 技术特点
 
@@ -32,10 +37,10 @@
 
 ## 🛠️ 技术栈
 
-| 技术 | 说明 |
-|------|------|
+| 技术           | 说明            |
+| -------------- | --------------- |
 | IEC 61131-3 ST | PLC编程语言标准 |
-| Beremiz/Luban | 开源自动化IDE |
+| Beremiz/Luban  | 开源自动化IDE   |
 
 ## 📁 文档结构
 
