@@ -93,6 +93,38 @@ export default withMermaid({
         max-width: 100%;
         height: auto;
       }
+      /* 导航栏样式优化 */
+      .VPNav {
+        --vp-nav-height: 48px;
+      }
+      .VPNavBar {
+        height: var(--vp-nav-height);
+      }
+      .VPNavBarMenu {
+        height: var(--vp-nav-height);
+      }
+      .VPNavBarMenuLink {
+        height: var(--vp-nav-height);
+        line-height: var(--vp-nav-height);
+        padding: 0 12px;
+      }
+      .VPNavBarMenuGroup {
+        height: var(--vp-nav-height);
+      }
+      .VPNavBarMenuGroup .button {
+        height: var(--vp-nav-height);
+        line-height: var(--vp-nav-height);
+        padding: 0 12px;
+      }
+      .VPNavBarMenuGroup .menu {
+        top: var(--vp-nav-height);
+      }
+      .VPNavBarAppearance {
+        height: var(--vp-nav-height);
+      }
+      .VPSocialLinks {
+        height: var(--vp-nav-height);
+      }
     `],
     // 预加载关键资源
     ['link', { rel: 'preload', href: '/assets/app.js', as: 'script', defer: true }],
