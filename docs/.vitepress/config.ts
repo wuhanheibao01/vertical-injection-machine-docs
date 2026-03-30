@@ -118,6 +118,15 @@ export default withMermaid({
       }
       .VPNavBarMenuGroup .menu {
         top: var(--vp-nav-height);
+        background-color: var(--vp-c-bg);
+        border: 1px solid var(--vp-c-divider);
+      }
+      .VPNavBarMenuGroup .menu .item {
+        color: var(--vp-c-text-1);
+      }
+      .VPNavBarMenuGroup .menu .item:hover {
+        background-color: var(--vp-c-bg-alt);
+        color: var(--vp-c-primary);
       }
       .VPNavBarAppearance {
         height: var(--vp-nav-height);
