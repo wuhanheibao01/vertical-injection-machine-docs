@@ -33,22 +33,22 @@ STRUCT
     stCleanMaterial: ST_PanelButton;     // 清料键综合点位，统一收口其排序号、键值和灯值。
     stJetLube: ST_PanelButton;           // 润滑键综合点位，统一收口其排序号、键值和灯值。
     stInjFwd: ST_PanelButton;            // 射出键综合点位，统一收口其排序号、键值和灯值。
-    stInjBwd: ST_PanelButton;            // 射退键综合点位，统一收口其排序号、键值和灯值。
-    stZipperBwd: ST_PanelButton;         // 倒带键综合点位，统一收口其排序号、键值和灯值。
-    stZipperFwd: ST_PanelButton;         // 拉带键综合点位，统一收口其排序号、键值和灯值。
+    stInjBwd: ST_PanelButton;            // 射退键综合点位，统一收口其排序号、键值和灯值。 
     stPressRise: ST_PanelButton;         // 压力加键综合点位，统一收口其排序号、键值和灯值。
     stPressFall: ST_PanelButton;         // 压力减键综合点位，统一收口其排序号、键值和灯值。
     stEjectorFwd: ST_PanelButton;        // 托模进键综合点位，统一收口其排序号、键值和灯值。
     stEjectorBwd: ST_PanelButton;        // 托模退键综合点位，统一收口其排序号、键值和灯值。
     stMultiEjector: ST_PanelButton;      // 多次托模键综合点位，统一收口其排序号、键值和灯值。
     stBlow: ST_PanelButton;              // 吹气键综合点位，统一收口其排序号、键值和灯值。
-    stZipperClamp: ST_PanelButton;       // 夹带键综合点位，统一收口其排序号、键值和灯值。
-    stZipperMotor: ST_PanelButton;       // 拉带马达键综合点位，统一收口其排序号、键值和灯值。
     stInjUnitFwd: ST_PanelButton;        // 座进键综合点位，统一收口其排序号、键值和灯值。
     stInjUnitBwd: ST_PanelButton;        // 座退键综合点位，统一收口其排序号、键值和灯值。
     stLockFwd: ST_PanelButton;           // 定位进键综合点位，统一收口其排序号、键值和灯值。
     stLockBwd: ST_PanelButton;           // 定位退键综合点位，统一收口其排序号、键值和灯值。
     stCoreFwdA: ST_PanelButton;          // 中子 A 进键综合点位，统一收口其排序号、键值和灯值。
-    stCoreBwdA: ST_PanelButton;          // 中子 A 退键综合点位，统一收口其排序号、键值和灯值。
+    stCoreBwdA: ST_PanelButton;          // 中子 A 退键综合点位，统一收口其排序号、键值和灯值。   
+    stZipperBwd: ST_PanelButton;         // 倒带键综合点位，统一收口其排序号、键值和灯值。
+    stZipperFwd: ST_PanelButton;         // 拉带键综合点位，统一收口其排序号、键值和灯值。
+    stZipperClamp: ST_PanelButton;       // 夹带键综合点位，统一收口其排序号、键值和灯值。
+    stZipperMotor: ST_PanelButton;       // 拉带马达键综合点位，统一收口其排序号、键值和灯值。
 END_STRUCT
 END_TYPE
