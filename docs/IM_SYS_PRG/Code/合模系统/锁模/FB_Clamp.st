@@ -57,7 +57,6 @@ VAR
         rVelTolerance := 0.5,
         rPresTolerance := 0.5
     );
-    bAxisEnableLocal: BOOL := FALSE;     // 合模轴层使能，由模块内部根据停机/急停收口
     tPulse: TON;                         // 100ms 节拍定时器，用于把扫描周期累加成动作时间
     uiStageIndex: UINT := 0;             // 当前执行到的工艺段号
     uiStageCount: UINT := 0;             // 当前方向允许执行的有效段数，进入动作时做边界收口
@@ -461,31 +460,31 @@ ELSE
     END_CASE;
 END_IF;
 
-(* 将工艺层输出统一回写到共享轴结构，后续由 `FB_HydAxis` 做最终限幅和诊断。 *)
+(* 先把现场反馈、固定轴配置和模块报警写回共享轴结构，再通过统一轴层接口下发本拍命令。 *)
 ClampAxis.rActualPosition := rClampActualPosition;
 ClampAxis.rActualVelocity := rClampActualVelocity;
 ClampAxis.rActualPressure := rClampActualPressure;
-ClampAxis.rSetPressure := TO_LREAL(uiPresCmd);
-ClampAxis.rSetVelocity := TO_LREAL(uiSpdCmd);
-ClampAxis.rSetPosition := TO_LREAL(udiPosCmd);
-ClampAxis.stPumpRequest.bRequest := bBusy;
-ClampAxis.stPumpRequest.rPressureSet := TO_LREAL(uiPresCmd);
-ClampAxis.stPumpRequest.rFlowSet := TO_LREAL(uiSpdCmd);
-IF bBusy THEN
-    ClampAxis.eAxisState := Running;
-ELSE
-    ClampAxis.eAxisState := Idle;
-END_IF;
+ClampAxis.stConfig := stAxisConfigLocal;
 ClampAxis.nFaultCode := TO_INT(dwAlarmID);
-bAxisEnableLocal := (NOT bStop) AND (NOT bEStop);
 
 fbAxisInst(
-    stAxisRef := ClampAxis,
-    bEnable := bAxisEnableLocal,
-    bReset := bReset,
-    stConfig := stAxisConfigLocal,
-    stStatus => stAxisStatusLocal
+    stAxisRef := ClampAxis,           // 把共享合模轴结构交给轴层，让轴层统一回写最终命令与状态。
+    bStart := bBusy,                  // 合模块当前处于忙碌态时，通知轴层本拍需要保持执行命令。
+    bStop := bStop,                   // 把合模块收到的正常停止命令直接送给轴层做统一撤销。
+    bEStop := bEStop,                 // 把合模块收到的急停命令直接送给轴层做统一撤销与报警。
+    bReset := bReset,                 // 把合模块收到的复位命令直接送给轴层清空命令和状态。
+    bDir := bCloseRequest,            // 当前把“TRUE=合模/锁模方向”定义为合模轴正向方向。
+    uiMode := UINT#1,                 // 当前液压执行链统一按位置模式接口收口，再把速度与压力作为辅助目标一起下发。
+    uiCmdPres := uiPresCmd,           // 把合模块当前压力命令送给轴层做最终压力限幅。
+    uiSpd := uiSpdCmd,                // 把合模块当前速度命令送给轴层做最终速度限幅。
+    udiPos := udiPosCmd,              // 把合模块当前位置目标送给轴层做最终行程限幅。
+    uiForce := uiPresCmd,             // 当前合模块尚未拆出独立锁模力命令，先复用压力命令占位传给轴层接口。
+    uiAcc := UINT#0,                  // 当前合模块尚未独立建模加速度接口，因此先固定传 0。
+    uiDec := UINT#0,                  // 当前合模块尚未独立建模减速度接口，因此先固定传 0。
+    uiJerk := UINT#0                  // 当前合模块尚未独立建模加加速度接口，因此先固定传 0。
 );
+
+stAxisStatusLocal := ClampAxis.stStatus; // 把共享轴结构中的轴层状态镜像到模块本地缓存，便于沿用现有状态汇总代码。
 
 bBusy := bBusy OR stAxisStatusLocal.bCommandActive;
 bAlarm := bAlarm OR stAxisStatusLocal.bAlarm;

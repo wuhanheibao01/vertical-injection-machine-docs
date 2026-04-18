@@ -52,7 +52,6 @@ VAR
         rVelTolerance := 0.5,
         rPresTolerance := 0.5
     );
-    bAxisEnableLocal: BOOL := FALSE;     // 中子轴层使能，由模块内部根据停机/急停收口
     tPulse: TON;                        // 100ms 节拍定时器，用于累计动作时间
     udiElapsedMs: UDINT := 0;           // 当前中子动作已运行时间，单位 ms
     uiStopCount: UINT := 0;             // 停止信号上升沿累计次数，用于计数式结束模式
@@ -308,31 +307,31 @@ END_IF;
 bPrevInStop := bCoreInStop;
 bPrevOutStop := bCoreOutStop;
 
-(* 将工艺命令回写到共享轴结构，由轴层功能块继续做最终执行。 *)
+(* 先把现场反馈、固定轴配置和模块报警写回共享轴结构，再通过统一轴层接口下发中子命令。 *)
 stCoreAxis.rActualPosition := rCoreActualPosition;
 stCoreAxis.rActualVelocity := rCoreActualVelocity;
 stCoreAxis.rActualPressure := rCoreActualPressure;
-stCoreAxis.rSetPressure := TO_LREAL(uiPresCmd);
-stCoreAxis.rSetVelocity := TO_LREAL(uiSpdCmd);
-stCoreAxis.rSetPosition := TO_LREAL(udiPosCmd);
-stCoreAxis.stPumpRequest.bRequest := bBusy;
-stCoreAxis.stPumpRequest.rPressureSet := TO_LREAL(uiPresCmd);
-stCoreAxis.stPumpRequest.rFlowSet := TO_LREAL(uiSpdCmd);
-IF bBusy THEN
-    stCoreAxis.eAxisState := Running;
-ELSE
-    stCoreAxis.eAxisState := Idle;
-END_IF;
+stCoreAxis.stConfig := stAxisConfigLocal;
 stCoreAxis.nFaultCode := TO_INT(dwAlarmID);
-bAxisEnableLocal := (NOT bStop) AND (NOT bEStop);
 
 fbAxisInst(
-    stAxisRef := stCoreAxis,
-    bEnable := bAxisEnableLocal,
-    bReset := bReset,
-    stConfig := stAxisConfigLocal,
-    stStatus => stAxisStatusLocal
+    stAxisRef := stCoreAxis,         // 把中子共享轴结构交给轴层实例统一整理最终命令与状态。
+    bStart := bBusy,                 // 中子模块当前忙碌时，通知轴层继续执行本拍目标命令。
+    bStop := bStop,                  // 把中子模块收到的正常停止命令直接送给轴层。
+    bEStop := bEStop,                // 把中子模块收到的急停命令直接送给轴层。
+    bReset := bReset,                // 把中子模块收到的复位命令直接送给轴层。
+    bDir := bInRequest,              // 当前把“TRUE=中子进方向”定义为中子轴正向方向。
+    uiMode := UINT#1,                // 当前液压执行链统一按位置模式接口收口。
+    uiCmdPres := uiPresCmd,          // 把中子模块当前压力命令送给轴层做最终压力限幅。
+    uiSpd := uiSpdCmd,               // 把中子模块当前速度命令送给轴层做最终速度限幅。
+    udiPos := udiPosCmd,             // 把中子模块当前位置目标送给轴层做最终行程限幅。
+    uiForce := UINT#0,               // 当前中子模块未定义独立力命令，因此该接口位先固定传 0。
+    uiAcc := UINT#0,                 // 当前中子模块未定义独立加速度命令，因此该接口位先固定传 0。
+    uiDec := UINT#0,                 // 当前中子模块未定义独立减速度命令，因此该接口位先固定传 0。
+    uiJerk := UINT#0                 // 当前中子模块未定义独立加加速度命令，因此该接口位先固定传 0。
 );
+
+stAxisStatusLocal := stCoreAxis.stStatus; // 把共享轴结构中的轴层状态镜像到模块本地缓存，沿用现有汇总代码。
 
 bBusy := bBusy OR stAxisStatusLocal.bCommandActive;
 bAlarm := bAlarm OR stAxisStatusLocal.bAlarm;

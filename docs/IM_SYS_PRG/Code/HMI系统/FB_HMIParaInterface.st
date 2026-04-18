@@ -8,6 +8,7 @@
   调用关系：
   1. 建议由 `PRG_MainControl` 在每个扫描周期固定调用一次。
   2. 本块只处理参数同步握手，不直接参与动作控制。
+  3. 本块只消费 PLC 内部 HMI 业务边界；实际 Modbus 输入输出通讯镜像应由统一 `FB_Modbus` 在本块前后转换。
 *)
 FUNCTION_BLOCK FB_HMIParaInterface
 VAR_IN_OUT

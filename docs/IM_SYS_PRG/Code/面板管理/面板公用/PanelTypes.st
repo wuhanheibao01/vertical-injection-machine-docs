@@ -1,78 +1,102 @@
-﻿(*
+﻿(* 
   PanelTypes.st
   功能：
-  1. 定义面板管理层统一使用的按键点位结构和综合按键结构。
-  2. 统一收口“面板排序号 + 按键值 + 按键灯”三类信息，避免键值与灯值分散绑定。
-  3. 为 `FB_MK110`、`FB_MK116`、`FB_MK150` 提供稳定的数据边界。
+  1. 定义面板管理层共用的型号枚举、PLC 内部原始面板字结构、单键结构、按钮 ID 枚举和综合按键数组结构。
+  2. 统一把不同硬件面板的逻辑键位收口到同一套 `ST_PanelButtons` 数据边界。
+  3. 当前面板公共坐标只保留 `uiPanelOrder`，不再维护额外的输入字/位映射字段。
+  4. 当前综合按键主模型改为 `aButton` 数组，让公用读键和写灯层可以按按钮 ID 循环处理，避免新增按键时再逐字段扩散修改。
 
   说明：
-  1. `uiPanelOrder` 由具体面板功能块按各自型号写入，`0` 表示当前面板未安装该逻辑键位。
-  2. `bValue` 由面板输入解码逻辑回写，表示当前逻辑键是否被按下。
-  3. `bLamp` 由上层控制逻辑写入，表示当前逻辑键对应的灯是否需要点亮。
+  1. `ST_PanelIO` 现在只表示 PLC 内部原始面板字业务边界，供 `FB_PanelDispatcher` 与公用读键/写灯层消费。
+  2. 实际面板 Modbus 通讯镜像已统一下沉到 `Code/Modbus通讯/ModbusTypes.st` 的 `ST_Modbus.stPanelInput` / `ST_Modbus.stPanelOutput`，并由 `FB_Modbus` 负责转换到这里。
 *)
-
-TYPE ST_PanelButton :
-STRUCT
-    uiPanelOrder: UINT;         // 当前逻辑键在当前面板型号中的逻辑排序号；`0` 表示该面板型号不提供此键位。
-    uiInputWordIndex: UINT;     // 当前逻辑键真实来自哪个输入字；`0..3` 分别对应 `uiIN0..uiIN3`，超出 `0..3` 表示无效映射。
-    uiInputBitIndex: UINT;      // 当前逻辑键在输入字中的真实位号；`0..15` 有效，超出 `0..15` 表示无效映射。
-    bValue: BOOL;               // 当前逻辑键输入值；由面板功能块按“输入字号 + 输入位号”显式解码后回写。
-    bLamp: BOOL;                // 当前逻辑键灯输出请求；由上层写入，再由面板功能块按 `uiPanelOrder` 编码到输出字。
-END_STRUCT
-END_TYPE
 
 TYPE E_PanelModel :
 (
-    ePanel_None,    // 未选择任何面板型号；顶层面板调度块只清零输出，不解码按键。
-    ePanel_MK110,   // 当前顶层接入的硬件面板为 MK110。
-    ePanel_MK116,   // 当前顶层接入的硬件面板为 MK116。
-    ePanel_MK150    // 当前顶层接入的硬件面板为 MK150。
+    ePanel_None,        // 顶层当前不启用任何硬件面板型号。
+    ePanel_MK110,       // 顶层当前启用 MK110 硬件面板型号。
+    ePanel_MK116,       // 顶层当前启用 MK116 硬件面板型号。
+    ePanel_MK150        // 顶层当前启用 MK150 硬件面板型号。
 );
 END_TYPE
 
 TYPE ST_PanelIO :
 STRUCT
-    uiIN0: UINT;    // 面板原始输入字 0；由 IO 层或现场总线层回写。
-    uiIN1: UINT;    // 面板原始输入字 1；由 IO 层或现场总线层回写。
-    uiIN2: UINT;    // 面板原始输入字 2；由 IO 层或现场总线层回写。
-    uiIN3: UINT;    // 面板原始输入字 3；由 IO 层或现场总线层回写。
-    uiOUT0: UINT;   // 面板原始输出字 0；由面板调度块汇总后回写给 IO 层。
-    uiOUT1: UINT;   // 面板原始输出字 1；由面板调度块汇总后回写给 IO 层。
-    uiOUT2: UINT;   // 面板原始输出字 2；由面板调度块汇总后回写给 IO 层。
-    uiOUT3: UINT;   // 面板原始输出字 3；由面板调度块汇总后回写给 IO 层。
+    uiIN0: UINT;        // PLC 内部面板输入字 0；由统一 `FB_Modbus` 在输入绑定阶段回写，承载排序号 `1..16` 对应的 16 个按键输入位。
+    uiIN1: UINT;        // PLC 内部面板输入字 1；由统一 `FB_Modbus` 在输入绑定阶段回写，承载排序号 `17..32` 对应的 16 个按键输入位。
+    uiIN2: UINT;        // PLC 内部面板输入字 2；由统一 `FB_Modbus` 在输入绑定阶段回写，承载排序号 `33..48` 对应的 16 个按键输入位。
+    uiIN3: UINT;        // PLC 内部面板输入字 3；由统一 `FB_Modbus` 在输入绑定阶段回写，承载排序号 `49..64` 对应的 16 个按键输入位。
+    uiOUT0: UINT;       // PLC 内部面板输出字 0；由面板调度块回写后，再由统一 `FB_Modbus` 在输出绑定阶段发送给面板/HMI。
+    uiOUT1: UINT;       // PLC 内部面板输出字 1；由面板调度块回写后，再由统一 `FB_Modbus` 在输出绑定阶段发送给面板/HMI。
+    uiOUT2: UINT;       // PLC 内部面板输出字 2；由面板调度块回写后，再由统一 `FB_Modbus` 在输出绑定阶段发送给面板/HMI。
+    uiOUT3: UINT;       // PLC 内部面板输出字 3；由面板调度块回写后，再由统一 `FB_Modbus` 在输出绑定阶段发送给面板/HMI。
 END_STRUCT
+END_TYPE
+
+TYPE ST_PanelButton :
+STRUCT
+    uiPanelOrder: UINT; // 当前逻辑键在当前面板型号中的统一排序号；`0` 表示当前型号不提供该键位。
+    bValue: BOOL;       // 当前逻辑键实时按键值；由面板读键层按 `uiPanelOrder` 回写。
+    bLamp: BOOL;        // 当前逻辑键实时灯请求；由面板调度层或上层状态汇总逻辑回写。
+END_STRUCT
+END_TYPE
+
+TYPE E_PanelButtonID :
+(
+    ePanelButton_Manual,           // 手动键按钮 ID；对应原工艺语义 `Manual`。
+    ePanelButton_SemiAuto,         // 半自动键按钮 ID；对应原工艺语义 `SemiAuto`。
+    ePanelButton_FullAuto,         // 全自动键按钮 ID；对应原工艺语义 `FullAuto`。
+    ePanelButton_MoldAdjust,       // 调模模式键按钮 ID；对应原工艺语义 `MoldAdjust`。
+    ePanelButton_Heater,           // 电热开关键按钮 ID；对应原工艺语义 `Heater`。
+    ePanelButton_Motor,            // 马达键按钮 ID；对应原工艺语义 `Motor`。
+    ePanelButton_MoldOpen,         // 开模键按钮 ID；对应原工艺语义 `MoldOpen`。
+    ePanelButton_MoldClose,        // 合模键按钮 ID；对应原工艺语义 `MoldClose`。
+    ePanelButton_Metering,         // 储料键按钮 ID；对应原工艺语义 `Metering`。
+    ePanelButton_CleanMaterial,    // 清料键按钮 ID；对应原工艺语义 `CleanMaterial`。
+    ePanelButton_Injection,        // 射出键按钮 ID；对应原工艺语义 `Injection`。
+    ePanelButton_SuckBack,         // 射退键按钮 ID；对应原工艺语义 `SuckBack`。
+    ePanelButton_EjectIn,          // 托模进键按钮 ID；对应原工艺语义 `EjectIn`。
+    ePanelButton_EjectOut,         // 托模退键按钮 ID；对应原工艺语义 `EjectOut`。
+    ePanelButton_NozzleIn,         // 座进键按钮 ID；对应原工艺语义 `NozzleIn`。
+    ePanelButton_NozzleOut,        // 座退键按钮 ID；对应原工艺语义 `NozzleOut`。
+    ePanelButton_CoreAIn,          // 中子 A 进键按钮 ID；对应原工艺语义 `CoreAIn`。
+    ePanelButton_CoreAOut,         // 中子 A 退键按钮 ID；对应原工艺语义 `CoreAOut`。
+    ePanelButton_CoreBIn,          // 中子 B 进键按钮 ID；对应原工艺语义 `CoreBIn`。
+    ePanelButton_CoreBOut,         // 中子 B 退键按钮 ID；对应原工艺语义 `CoreBOut`。
+    ePanelButton_CoreCIn,          // 中子 C 进键按钮 ID；对应原工艺语义 `CoreCIn`。
+    ePanelButton_CoreCOut,         // 中子 C 退键按钮 ID；对应原工艺语义 `CoreCOut`。
+    ePanelButton_CoreDIn,          // 中子 D 进键按钮 ID；对应原工艺语义 `CoreDIn`。
+    ePanelButton_CoreDOut,         // 中子 D 退键按钮 ID；对应原工艺语义 `CoreDOut`。
+    ePanelButton_CoreEIn,          // 中子 E 进键按钮 ID；对应原工艺语义 `CoreEIn`。
+    ePanelButton_CoreEOut,         // 中子 E 退键按钮 ID；对应原工艺语义 `CoreEOut`。
+    ePanelButton_CoreFIn,          // 中子 F 进键按钮 ID；对应原工艺语义 `CoreFIn`。
+    ePanelButton_CoreFOut,         // 中子 F 退键按钮 ID；对应原工艺语义 `CoreFOut`。
+    ePanelButton_CoreGIn,          // 中子 G 进键按钮 ID；对应原工艺语义 `CoreGIn`。
+    ePanelButton_CoreGOut,         // 中子 G 退键按钮 ID；对应原工艺语义 `CoreGOut`。
+    ePanelButton_CoreHIn,          // 中子 H 进键按钮 ID；对应原工艺语义 `CoreHIn`。
+    ePanelButton_CoreHOut,         // 中子 H 退键按钮 ID；对应原工艺语义 `CoreHOut`。
+    ePanelButton_MoldAdjustIn,     // 调模进键按钮 ID；对应原工艺语义 `MoldAdjustIn`。
+    ePanelButton_MoldAdjustOut,    // 调模退键按钮 ID；对应原工艺语义 `MoldAdjustOut`。
+    ePanelButton_AirBlow,          // 吹气键按钮 ID；对应原工艺语义 `AirBlow`。
+    ePanelButton_AirBlowA,         // 吹气 A 键按钮 ID；对应原工艺语义 `AirBlowA`。
+    ePanelButton_AirBlowB,         // 吹气 B 键按钮 ID；对应原工艺语义 `AirBlowB`。
+    ePanelButton_JetLube,          // 润滑键按钮 ID；对应原工艺语义 `JetLube`。
+    ePanelButton_Ejector,          // 多次托模键按钮 ID；对应原工艺语义 `Ejector`。
+    ePanelButton_LockIn,           // 定位进键按钮 ID；对应原工艺语义 `LockIn`。
+    ePanelButton_LockOut,          // 定位退键按钮 ID；对应原工艺语义 `LockOut`。
+    ePanelButton_PressRise,        // 压力加键按钮 ID；对应原工艺语义 `PressRise`。
+    ePanelButton_PressFall,        // 压力减键按钮 ID；对应原工艺语义 `PressFall`。
+    ePanelButton_ZipperBwd,        // 倒带键按钮 ID；对应原工艺语义 `ZipperBwd`。
+    ePanelButton_ZipperFwd,        // 拉带键按钮 ID；对应原工艺语义 `ZipperFwd`。
+    ePanelButton_ZipperClamp,      // 夹带键按钮 ID；对应原工艺语义 `ZipperClamp`。
+    ePanelButton_ZipperMotor,      // 拉带马达键按钮 ID；对应原工艺语义 `ZipperMotor`。
+    ePanelButton_Count             // 按钮总数计数哨兵；不是实际按钮，只用于循环上界与容量维护。
+);
 END_TYPE
 
 TYPE ST_PanelButtons :
 STRUCT
-    stManual: ST_PanelButton;            // 手动键综合点位，统一收口其排序号、键值和灯值。
-    stSemiautomatic: ST_PanelButton;     // 半自动键综合点位，统一收口其排序号、键值和灯值。
-    stAutomatic: ST_PanelButton;         // 全自动键综合点位，统一收口其排序号、键值和灯值。
-    stAdjustMold: ST_PanelButton;        // 调模键综合点位，统一收口其排序号、键值和灯值。
-    stHeat: ST_PanelButton;              // 电热键综合点位，统一收口其排序号、键值和灯值。
-    stMotor: ST_PanelButton;             // 马达键综合点位，统一收口其排序号、键值和灯值。
-    stMoldOpen: ST_PanelButton;          // 开模键综合点位，统一收口其排序号、键值和灯值。
-    stMoldClose: ST_PanelButton;         // 锁模键综合点位，统一收口其排序号、键值和灯值。
-    stMaterialMelt: ST_PanelButton;      // 储料键综合点位，统一收口其排序号、键值和灯值。
-    stCleanMaterial: ST_PanelButton;     // 清料键综合点位，统一收口其排序号、键值和灯值。
-    stJetLube: ST_PanelButton;           // 润滑键综合点位，统一收口其排序号、键值和灯值。
-    stInjFwd: ST_PanelButton;            // 射出键综合点位，统一收口其排序号、键值和灯值。
-    stInjBwd: ST_PanelButton;            // 射退键综合点位，统一收口其排序号、键值和灯值。 
-    stPressRise: ST_PanelButton;         // 压力加键综合点位，统一收口其排序号、键值和灯值。
-    stPressFall: ST_PanelButton;         // 压力减键综合点位，统一收口其排序号、键值和灯值。
-    stEjectorFwd: ST_PanelButton;        // 托模进键综合点位，统一收口其排序号、键值和灯值。
-    stEjectorBwd: ST_PanelButton;        // 托模退键综合点位，统一收口其排序号、键值和灯值。
-    stMultiEjector: ST_PanelButton;      // 多次托模键综合点位，统一收口其排序号、键值和灯值。
-    stBlow: ST_PanelButton;              // 吹气键综合点位，统一收口其排序号、键值和灯值。
-    stInjUnitFwd: ST_PanelButton;        // 座进键综合点位，统一收口其排序号、键值和灯值。
-    stInjUnitBwd: ST_PanelButton;        // 座退键综合点位，统一收口其排序号、键值和灯值。
-    stLockFwd: ST_PanelButton;           // 定位进键综合点位，统一收口其排序号、键值和灯值。
-    stLockBwd: ST_PanelButton;           // 定位退键综合点位，统一收口其排序号、键值和灯值。
-    stCoreFwdA: ST_PanelButton;          // 中子 A 进键综合点位，统一收口其排序号、键值和灯值。
-    stCoreBwdA: ST_PanelButton;          // 中子 A 退键综合点位，统一收口其排序号、键值和灯值。   
-    stZipperBwd: ST_PanelButton;         // 倒带键综合点位，统一收口其排序号、键值和灯值。
-    stZipperFwd: ST_PanelButton;         // 拉带键综合点位，统一收口其排序号、键值和灯值。
-    stZipperClamp: ST_PanelButton;       // 夹带键综合点位，统一收口其排序号、键值和灯值。
-    stZipperMotor: ST_PanelButton;       // 拉带马达键综合点位，统一收口其排序号、键值和灯值。
+    aButton: ARRAY[0..46] OF ST_PanelButton; // 综合按键数组；当前上界必须始终等于 `TO_UINT(ePanelButton_Count) - 1`。
 END_STRUCT
 END_TYPE
+

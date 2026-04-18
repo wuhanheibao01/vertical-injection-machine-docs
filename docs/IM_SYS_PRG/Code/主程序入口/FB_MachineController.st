@@ -37,6 +37,9 @@ VAR_OUTPUT
 
     (* 透传关键组合输出。 *)
     aCoreAllow: ARRAY[1..8] OF BOOL;     // 合模模块回写的 8 路中子允许位，供其他模块和上位系统读取联锁结果。
+    stModuleCommandsOut: ST_MachineModuleCommands; // 主控本拍最终合成出的模块命令镜像；供顶层 IO 输出映射层直接消费。
+    uiClampActHintOut: UINT;             // 合模块当前动作提示镜像；供顶层 IO 输出映射层区分开模、合模、高压与卸压阶段。
+    uiSelectedEjectActHintOut: UINT;     // 当前被选中的托模动作提示镜像；供顶层 IO 输出映射层判断托模真实方向。
 END_VAR
 VAR
     (* 子模块实例。 *)
@@ -571,6 +574,10 @@ END_IF;
 FOR uiIndex := 1 TO 8 DO
     aCoreAllow[uiIndex] := aCoreAllowLocal[uiIndex];      // 逐路把合模块给出的中子允许位复制到对外输出数组。
 END_FOR;
+
+stModuleCommandsOut := stModuleCommands;                  // 把本拍最终模块命令集合透传给顶层，供原始输出映射层直接消费。
+uiClampActHintOut := uiClampActHint;                      // 把合模块动作提示号透传给顶层，供输出映射层识别卸压与高压锁模阶段。
+uiSelectedEjectActHintOut := uiSelectedEjectActHint;      // 把当前托模来源动作提示号透传给顶层，供输出映射层判断真实托模方向。
 
 (* 机器级状态汇总。 *)
 fbStatusAggregator(

@@ -51,7 +51,6 @@ VAR
         rVelTolerance := 0.5,
         rPresTolerance := 0.5
     );
-    bAxisEnableLocal: BOOL := FALSE;     // 储料轴层使能，由模块内部根据停机/急停收口
     uiStageIndex: UINT := 0;             // 当前执行到的储料段号
     tPulse: TON;                         // 100ms 节拍定时器，用于累计储料时间
     udiElapsedMs: UDINT := 0;            // 当前储料动作已运行时间，单位 ms
@@ -194,32 +193,32 @@ ELSE
     END_CASE;
 END_IF;
 
-(* 当前轴接口没有独立背压设定字段，因此这里只把压力/速度/位置回写到共享轴结构；
+(* 当前轴接口没有独立背压设定字段，因此这里只回写现场反馈、固定轴配置和模块报警；
    `uiBackPresCmd` 仍保留在功能块输出，供主控或后续扩展读取。 *)
 stMeterAxis.rActualPosition := rMeterActualPosition;
 stMeterAxis.rActualVelocity := rMeterActualVelocity;
 stMeterAxis.rActualPressure := rMeterActualPressure;
-stMeterAxis.rSetPressure := TO_LREAL(uiPresCmd);
-stMeterAxis.rSetVelocity := TO_LREAL(uiSpdCmd);
-stMeterAxis.rSetPosition := TO_LREAL(udiPosCmd);
-stMeterAxis.stPumpRequest.bRequest := bBusy;
-stMeterAxis.stPumpRequest.rPressureSet := TO_LREAL(uiPresCmd);
-stMeterAxis.stPumpRequest.rFlowSet := TO_LREAL(uiSpdCmd);
-IF bBusy THEN
-    stMeterAxis.eAxisState := Running;
-ELSE
-    stMeterAxis.eAxisState := Idle;
-END_IF;
+stMeterAxis.stConfig := stAxisConfigLocal;
 stMeterAxis.nFaultCode := TO_INT(dwAlarmID);
-bAxisEnableLocal := (NOT bStop) AND (NOT bEStop);
 
 fbAxisInst(
-    stAxisRef := stMeterAxis,
-    bEnable := bAxisEnableLocal,
-    bReset := bReset,
-    stConfig := stAxisConfigLocal,
-    stStatus => stAxisStatusLocal
+    stAxisRef := stMeterAxis,        // 把储料共享轴结构交给轴层实例统一整理最终命令与状态。
+    bStart := bBusy,                 // 储料模块当前忙碌时，通知轴层继续执行本拍目标命令。
+    bStop := bStop,                  // 把储料模块收到的正常停止命令直接送给轴层。
+    bEStop := bEStop,                // 把储料模块收到的急停命令直接送给轴层。
+    bReset := bReset,                // 把储料模块收到的复位命令直接送给轴层。
+    bDir := TRUE,                    // 当前储料流程只有单向执行语义，因此先固定把正向定义为储料方向。
+    uiMode := UINT#1,                // 当前液压执行链统一按位置模式接口收口。
+    uiCmdPres := uiPresCmd,          // 把储料模块当前压力命令送给轴层做最终压力限幅。
+    uiSpd := uiSpdCmd,               // 把储料模块当前速度命令送给轴层做最终速度限幅。
+    udiPos := udiPosCmd,             // 把储料模块当前位置目标送给轴层做最终行程限幅。
+    uiForce := UINT#0,               // 当前储料模块未定义独立力命令，因此该接口位先固定传 0。
+    uiAcc := UINT#0,                 // 当前储料模块未定义独立加速度命令，因此该接口位先固定传 0。
+    uiDec := UINT#0,                 // 当前储料模块未定义独立减速度命令，因此该接口位先固定传 0。
+    uiJerk := UINT#0                 // 当前储料模块未定义独立加加速度命令，因此该接口位先固定传 0。
 );
+
+stAxisStatusLocal := stMeterAxis.stStatus; // 把共享轴结构中的轴层状态镜像到模块本地缓存，沿用现有汇总代码。
 
 bBusy := bBusy OR stAxisStatusLocal.bCommandActive;
 bAlarm := bAlarm OR stAxisStatusLocal.bAlarm;

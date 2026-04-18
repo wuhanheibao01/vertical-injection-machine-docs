@@ -53,7 +53,6 @@ VAR
         rVelTolerance := 0.5,
         rPresTolerance := 0.5
     );
-    bAxisEnableLocal: BOOL := FALSE;        // 调模轴层使能，由模块内部根据停机/急停收口
     tPulse: TON;                              // 100ms 节拍定时器，用于累计动作时间
     udiElapsedMs: UDINT := 0;                 // 当前调模动作已运行时间，单位 ms
     bManualActive: BOOL := FALSE;             // TRUE=当前按手动/调试逻辑执行
@@ -235,31 +234,31 @@ ELSE
     END_CASE;
 END_IF;
 
-(* 把工艺命令写回共享轴结构，由主控后的轴层功能块继续处理。 *)
+(* 先把现场反馈、固定轴配置和模块报警写回共享轴结构，再通过统一轴层接口下发本拍命令。 *)
 stMoldAdjustAxis.rActualPosition := rMoldAdjustActualPosition;
 stMoldAdjustAxis.rActualVelocity := rMoldAdjustActualVelocity;
 stMoldAdjustAxis.rActualPressure := rMoldAdjustActualPressure;
-stMoldAdjustAxis.rSetPressure := TO_LREAL(uiPresCmd);
-stMoldAdjustAxis.rSetVelocity := TO_LREAL(uiSpdCmd);
-stMoldAdjustAxis.rSetPosition := TO_LREAL(udiPosCmd);
-stMoldAdjustAxis.stPumpRequest.bRequest := bBusy;
-stMoldAdjustAxis.stPumpRequest.rPressureSet := TO_LREAL(uiPresCmd);
-stMoldAdjustAxis.stPumpRequest.rFlowSet := TO_LREAL(uiSpdCmd);
-IF bBusy THEN
-    stMoldAdjustAxis.eAxisState := Running;
-ELSE
-    stMoldAdjustAxis.eAxisState := Idle;
-END_IF;
+stMoldAdjustAxis.stConfig := stAxisConfigLocal;
 stMoldAdjustAxis.nFaultCode := TO_INT(dwAlarmID);
-bAxisEnableLocal := (NOT bStop) AND (NOT bEStop);
 
 fbAxisInst(
-    stAxisRef := stMoldAdjustAxis,
-    bEnable := bAxisEnableLocal,
-    bReset := bReset,
-    stConfig := stAxisConfigLocal,
-    stStatus => stAxisStatusLocal
+    stAxisRef := stMoldAdjustAxis,   // 把调模共享轴结构交给轴层实例统一整理最终命令与状态。
+    bStart := bBusy,                 // 调模块当前忙碌时，通知轴层继续执行本拍目标命令。
+    bStop := bStop,                  // 把调模块收到的正常停止命令直接送给轴层。
+    bEStop := bEStop,                // 把调模块收到的急停命令直接送给轴层。
+    bReset := bReset,                // 把调模块收到的复位命令直接送给轴层。
+    bDir := bInRequest,              // 当前把“TRUE=调模进方向”定义为调模轴正向方向。
+    uiMode := UINT#1,                // 当前液压执行链统一按位置模式接口收口。
+    uiCmdPres := uiPresCmd,          // 把调模块当前压力命令送给轴层做最终压力限幅。
+    uiSpd := uiSpdCmd,               // 把调模块当前速度命令送给轴层做最终速度限幅。
+    udiPos := udiPosCmd,             // 把调模块当前位置目标送给轴层做最终行程限幅。
+    uiForce := UINT#0,               // 当前调模块未定义独立力命令，因此该接口位先固定传 0。
+    uiAcc := UINT#0,                 // 当前调模块未定义独立加速度命令，因此该接口位先固定传 0。
+    uiDec := UINT#0,                 // 当前调模块未定义独立减速度命令，因此该接口位先固定传 0。
+    uiJerk := UINT#0                 // 当前调模块未定义独立加加速度命令，因此该接口位先固定传 0。
 );
+
+stAxisStatusLocal := stMoldAdjustAxis.stStatus; // 把共享轴结构里的轴层状态镜像到模块本地缓存，继续复用现有汇总代码。
 
 bBusy := bBusy OR stAxisStatusLocal.bCommandActive;
 bAlarm := bAlarm OR stAxisStatusLocal.bAlarm;

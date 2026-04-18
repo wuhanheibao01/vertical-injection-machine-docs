@@ -9,6 +9,7 @@
   1. 现有各 `FB_*` 子模块仍然保持模块级职责，不在这里重复定义工艺细节。
   2. 机器级接口只负责把分散的模块输入输出汇总成“可实例化、可调用、可监控”的主控层。
   3. 后续若增加新轴、新模块或新工艺模式，应优先扩展本文件，再扩展主控逻辑。
+  4. 本文件中的 HMI 相关结构现在只表示 PLC 内部 HMI 业务边界；实际 Modbus 通讯镜像已统一下沉到 `Code/Modbus通讯/ModbusTypes.st`。
 *)
 
 TYPE ST_MachineManualCommand :
@@ -45,6 +46,9 @@ STRUCT
     bCoreStart: BOOL;
     uiCoreMode: UINT;
 
+    (* 主动力系统命令。bMotorStart 作为马达总开关锁存位，由顶层面板或其他命令源统一维护。 *)
+    bMotorStart: BOOL;          // TRUE=允许顶层输出马达主驱动命令，并作为液压就绪判定的前提之一。
+
     (* 温控顶层命令。bTempStart 启动温控；bR0~bR3 可直接下发 4 组加热命令。 *)
     bTempStart: BOOL;          // TRUE=顶层温控块进入执行态。
     bR0: BOOL;                 // TRUE=人工直接驱动第 0 组加热输出。
@@ -59,12 +63,13 @@ STRUCT
     (* 机器级公共命令。
        说明：
        1. 该结构既可以作为单一命令源边界，也可以作为顶层仲裁后的最终机器命令边界。
-       2. 当前工程先接入面板命令源，再由 `FB_CommandArbiter` 统一生成最终 `gvl_stCommand`。
+       2. 当前工程已显式接入两个命令源：`gvl_stPLCDigitalCommandSource` 负责公共启动/停止/复位/急停，`gvl_stPanelCommandSource` 负责模式选择与手动点动命令。
+       3. `FB_CommandArbiter` 当前显式优先级为：PLC 数字量公共命令源覆盖基础命令快照，面板命令源覆盖模式与手动字段。
     *)
-    bStart: BOOL;               // 周期启动/当前模块启动
-    bStop: BOOL;                // 正常停止
-    bEStop: BOOL;               // 急停
-    bReset: BOOL;               // 复位所有模块
+    bStart: BOOL;               // 公共启动命令；当前顶层真实来源暂定为 `stPLC.X50`，并由顶层仲裁后统一下发。
+    bStop: BOOL;                // 公共停止命令；当前顶层真实来源暂定为 `stPLC.X51`，并由顶层仲裁后统一下发。
+    bEStop: BOOL;               // 公共急停命令；当前顶层真实来源暂定为 `stPLC.X53`，并由顶层仲裁后统一下发。
+    bReset: BOOL;               // 公共复位命令；当前顶层真实来源暂定为 `stPLC.X52`，并由顶层仲裁后统一下发。
 
     (* 运行模式。
        0=停机/待机
@@ -245,6 +250,7 @@ TYPE ST_HMIRecipeMeta :
 STRUCT
     (* HMI 配方基础信息。
        这些字段不直接参与动作控制，但便于画面做配方编号、名称、版本和脏数据管理。
+       当前结构由 HMI 参数业务层消费；若需要映射到实际 Modbus 寄存器区，应通过统一 `FB_Modbus` 处理。
     *)
     uiRecipeID: UINT;             // HMI 配方号/工艺号
     sRecipeName: STRING[40];      // HMI 显示用配方名称
@@ -257,15 +263,16 @@ TYPE ST_HMIProcessPara :
 STRUCT
     (* HMI 统一工艺参数接口。
        说明：
-       1. HMI 只需要绑定这一套结构，就能覆盖整机全部工艺参数。
-       2. 内部仍复用各模块原生参数结构，避免为了画面再拆一层重复字段。
-       3. `stMachinePara` 是 HMI 编辑缓冲区，不等同于当前在线运行参数。
+       1. 该结构是 PLC 内部 HMI 参数业务边界，由 `FB_HMIParaInterface` 直接消费。
+       2. 实际 HMI Modbus 通讯镜像应通过 `ST_ModbusHMIInput` / `ST_ModbusHMIOutput` 与 `FB_Modbus` 转换到这里。
+       3. 内部仍复用各模块原生参数结构，避免为了画面再拆一层重复字段。
+       4. `stMachinePara` 是 HMI 编辑缓冲区，不等同于当前在线运行参数。
           只有执行“应用到机器”后，内容才会写入在线参数。
-       4. HMI 画面在用户改动任意字段后，建议同步把 `stMeta.bDirty` 置为 TRUE，
+       5. HMI 画面在用户改动任意字段后，建议同步把 `stMeta.bDirty` 置为 TRUE，
           便于配方页显示“已编辑未下发/未保存”状态。
     *)
-    stMeta: ST_HMIRecipeMeta;
-    stMachinePara: ST_MachinePara;
+    stMeta: ST_HMIRecipeMeta;     // HMI 配方元数据业务区；由 HMI 参数接口块消费并由统一 `FB_Modbus` 决定是否映射到通讯镜像。
+    stMachinePara: ST_MachinePara; // HMI 工艺参数业务区；由 HMI 参数接口块消费并由统一 `FB_Modbus` 决定是否映射到通讯镜像。
 END_STRUCT
 END_TYPE
 
@@ -273,6 +280,7 @@ TYPE ST_HMIParaCommand :
 STRUCT
     (* HMI 参数同步命令。
        这些信号建议由按钮上升沿触发，不建议长时间保持 TRUE。
+       实际 HMI Modbus 命令区应通过统一 `FB_Modbus` 转换到这里。
     *)
     bReadMachinePara: BOOL;       // 把当前在线运行参数读回到 HMI 编辑缓冲区
     bApplyToMachine: BOOL;        // 把 HMI 编辑缓冲区参数应用到机器在线参数
@@ -284,6 +292,7 @@ TYPE ST_HMIParaStatus :
 STRUCT
     (* HMI 参数接口状态。
        这些状态用于给 HMI 做按钮反馈、提示灯和下发拦截提示。
+       实际 HMI Modbus 状态区应通过统一 `FB_Modbus` 从这里回写。
     *)
     bInitialized: BOOL;           // TRUE=已完成首次把在线参数装载到 HMI 缓冲区
     bMachineParaLocked: BOOL;     // TRUE=机器正在运行/忙碌，禁止下发工艺参数

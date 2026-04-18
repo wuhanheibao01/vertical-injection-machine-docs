@@ -53,7 +53,6 @@ VAR
         rVelTolerance := 0.5,
         rPresTolerance := 0.5
     );
-    bAxisEnableLocal: BOOL := FALSE;     // 托模轴层使能，由模块内部根据停机/急停收口
     uiStageIndex: UINT := 0;             // 当前执行到的托模进/托模退段号
     tPulse: TON;                         // 100ms 节拍定时器，用于累计动作时间
     udiElapsedMs: UDINT := 0;            // 当前托模动作或保持段已运行时间，单位 ms
@@ -318,31 +317,31 @@ ELSE
     END_CASE;
 END_IF;
 
-(* 将当前托模命令回写到共享轴结构，由轴层功能块完成最终执行。 *)
+(* 先把现场反馈、固定轴配置和模块报警写回共享轴结构，再通过统一轴层接口下发托模命令。 *)
 stEjectAxis.rActualPosition := rEjectActualPosition;
 stEjectAxis.rActualVelocity := rEjectActualVelocity;
 stEjectAxis.rActualPressure := rEjectActualPressure;
-stEjectAxis.rSetPressure := TO_LREAL(uiPresCmd);
-stEjectAxis.rSetVelocity := TO_LREAL(uiSpdCmd);
-stEjectAxis.rSetPosition := TO_LREAL(udiPosCmd);
-stEjectAxis.stPumpRequest.bRequest := bBusy;
-stEjectAxis.stPumpRequest.rPressureSet := TO_LREAL(uiPresCmd);
-stEjectAxis.stPumpRequest.rFlowSet := TO_LREAL(uiSpdCmd);
-IF bBusy THEN
-    stEjectAxis.eAxisState := Running;
-ELSE
-    stEjectAxis.eAxisState := Idle;
-END_IF;
+stEjectAxis.stConfig := stAxisConfigLocal;
 stEjectAxis.nFaultCode := TO_INT(dwAlarmID);
-bAxisEnableLocal := (NOT bStop) AND (NOT bEStop);
 
 fbAxisInst(
-    stAxisRef := stEjectAxis,
-    bEnable := bAxisEnableLocal,
-    bReset := bReset,
-    stConfig := stAxisConfigLocal,
-    stStatus => stAxisStatusLocal
+    stAxisRef := stEjectAxis,        // 把托模共享轴结构交给轴层实例统一整理最终命令与状态。
+    bStart := bBusy,                 // 托模模块当前忙碌时，通知轴层继续执行本拍目标命令。
+    bStop := bStop,                  // 把托模模块收到的正常停止命令直接送给轴层。
+    bEStop := bEStop,                // 把托模模块收到的急停命令直接送给轴层。
+    bReset := bReset,                // 把托模模块收到的复位命令直接送给轴层。
+    bDir := bInRequest,              // 当前把“TRUE=托模进方向”定义为托模轴正向方向。
+    uiMode := UINT#1,                // 当前液压执行链统一按位置模式接口收口。
+    uiCmdPres := uiPresCmd,          // 把托模模块当前压力命令送给轴层做最终压力限幅。
+    uiSpd := uiSpdCmd,               // 把托模模块当前速度命令送给轴层做最终速度限幅。
+    udiPos := udiPosCmd,             // 把托模模块当前位置目标送给轴层做最终行程限幅。
+    uiForce := UINT#0,               // 当前托模模块未定义独立力命令，因此该接口位先固定传 0。
+    uiAcc := UINT#0,                 // 当前托模模块未定义独立加速度命令，因此该接口位先固定传 0。
+    uiDec := UINT#0,                 // 当前托模模块未定义独立减速度命令，因此该接口位先固定传 0。
+    uiJerk := UINT#0                 // 当前托模模块未定义独立加加速度命令，因此该接口位先固定传 0。
 );
+
+stAxisStatusLocal := stEjectAxis.stStatus; // 把共享轴结构中的轴层状态镜像到模块本地缓存，沿用现有汇总代码。
 
 bBusy := bBusy OR stAxisStatusLocal.bCommandActive;
 bAlarm := bAlarm OR stAxisStatusLocal.bAlarm;

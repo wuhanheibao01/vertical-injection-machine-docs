@@ -8,19 +8,22 @@
   1. 具体工艺模块仍然只负责生成 `ST_AxisRefHyd` 的目标值与泵请求。
   2. 最终的轴实例化、限幅和轴层诊断，由 `FB_HydAxis` 完成。
 *)
+TYPE E_AxisState :
+(
+    Idle,           // 空闲：当前扫描周期没有有效液压轴执行命令。
+    Running,        // 运行：当前轴正在按照模块目标值输出动作。
+    Stop            // 停止：当前轴被上层停止逻辑或保护逻辑强制压停。
+);
+END_TYPE
 
-TYPE ST_HydAxisConfig :
+TYPE ST_PumpRequest :
 STRUCT
-    (* 轴身份与保护边界。 *)
-    nAxisID: INT;                // 统一轴号，供主控/HMI/下位 I/O 对齐
-    rMaxCylinderStroke: LREAL;   // 最大允许行程
-    rMaxVelocity: LREAL;         // 最大允许速度
-    rMaxPressure: LREAL;         // 最大允许压力
-    rPosTolerance: LREAL;        // 位置到位容差
-    rVelTolerance: LREAL;        // 速度到位容差
-    rPresTolerance: LREAL;       // 压力到位容差
+    bRequest: BOOL;       // TRUE=当前扫描周期该轴需要向液压站发起供油请求。
+    rFlowSet: LREAL;      // 当前轴请求液压站提供的目标流量，单位由液压站实现约定。
+    rPressureSet: LREAL;  // 当前轴请求液压站提供的目标压力，单位由液压站实现约定。
 END_STRUCT
 END_TYPE
+
 
 TYPE ST_HydAxisStatus :
 STRUCT
@@ -33,6 +36,7 @@ STRUCT
     bInPosition: BOOL;         // TRUE=实际位置进入目标位置容差带
     bInVelocity: BOOL;         // TRUE=实际速度进入目标速度容差带
     bInPressure: BOOL;         // TRUE=实际压力进入目标压力容差带
+  
 
     (* 轴层报警与诊断。 *)
     bAlarm: BOOL;              // TRUE=轴层发现限幅、禁用下命令或继承的模块报警
@@ -47,3 +51,41 @@ STRUCT
     rCmdPressure: LREAL;
 END_STRUCT
 END_TYPE
+
+TYPE ST_AxisRefHyd :
+STRUCT
+    (* 轴参与状态。 *)
+    bActive: BOOL;               // TRUE=该轴在当前模块、本扫描周期内参与机器控制。
+    eAxisState: E_AxisState;     // 当前轴的运行状态枚举，供模块和轴层共享状态语义。
+    nAxisID: INT;                // 当前液压轴统一轴号，用于绑定实际硬件对象或诊断对象。
+
+    (* 轴能力边界。 *)
+    rMaxCylinderStroke: LREAL;   // 当前轴允许的最大缸行程上限，用于位置命令限幅。
+    rMaxVelocity: LREAL;         // 当前轴允许的最大速度上限，用于速度命令限幅。
+    rMaxPressure: LREAL;         // 当前轴允许的最大压力上限，用于压力命令限幅。
+
+    (* 轴身份与保护边界。 *)
+    rPosTolerance: LREAL;        // 位置到位容差
+    rVelTolerance: LREAL;        // 速度到位容差
+    rPresTolerance: LREAL;       // 压力到位容差
+
+    (* 模块目标命令。 *)
+    rSetPosition: LREAL;         // 模块层写入的目标位置，由 `FB_HydAxis` 在最终输出前整理。
+    rSetVelocity: LREAL;         // 模块层写入的目标速度，由 `FB_HydAxis` 在最终输出前整理。
+    rSetPressure: LREAL;         // 模块层写入的目标压力，由 `FB_HydAxis` 在最终输出前整理。
+
+    (* 现场实际反馈。 *)
+    rActualPosition: LREAL;      // 当前轴现场回读的实际位置，供模块判断动作完成与异常。
+    rActualVelocity: LREAL;      // 当前轴现场回读的实际速度，供模块判断动作过程与异常。
+    rActualPressure: LREAL;      // 当前轴现场回读的实际压力，供模块判断保压与保护条件。
+        
+    stStatus: ST_HydAxisStatus;    // 轴层最终状态与限幅后的命令输出
+
+    (* 液压泵请求。 *)
+    stPumpRequest: ST_PumpRequest; // 当前轴整理后的液压站请求结果，供液压站侧统一消费。
+
+    (* 轴故障码。 *)
+    nFaultCode: INT;             // 当前轴相关报警或故障码，允许模块层与轴层叠加写入。
+END_STRUCT
+
+
