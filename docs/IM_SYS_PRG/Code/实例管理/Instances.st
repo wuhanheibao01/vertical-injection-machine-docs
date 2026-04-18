@@ -13,6 +13,12 @@ VAR_GLOBAL
     (* HMI 参数同步实例。 *)
     gvl_fbHMIParaInterface: FB_HMIParaInterface;   // 顶层唯一 HMI 参数同步实例，由 `PRG_MainControl` 每拍先调用。
 
+    (* 顶层面板调度实例。 *)
+    gvl_fbPanelDispatcher: FB_PanelDispatcher;     // 顶层唯一面板调度实例，由 `PRG_MainControl` 每拍先调用，统一完成面板型号分发、按键回灌和灯输出汇总。
+
+    (* 顶层命令仲裁实例。 *)
+    gvl_fbCommandArbiter: FB_CommandArbiter;       // 顶层唯一命令仲裁实例，由 `PRG_MainControl` 在各命令源之后统一生成最终机器命令。
+
     (* 顶层温控实例。 *)
     gvl_fbEK312: FB_EK312;                         // 顶层唯一温控实例，由 `PRG_MainControl` 直接调用，并与 `FB_MachineController` 保持完全分离。
 

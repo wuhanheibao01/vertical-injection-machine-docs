@@ -22,15 +22,20 @@ VAR_GLOBAL
     gvl_stHMIParaCommand: ST_HMIParaCommand;
     gvl_stHMIParaStatus: ST_HMIParaStatus;
 
-    (* 机器级命令、传感器和汇总状态。 *)
-    gvl_stCommand: ST_MachineCommand;
+    (* 机器级命令源与最终命令边界。 *)
+    gvl_stPanelCommandSource: ST_MachineCommand; // 面板调度层回写的独立命令源；先在此结构中锁存模式与点动意图，再交给顶层仲裁块。
+    gvl_stCommand: ST_MachineCommand;            // 顶层仲裁后的最终机器命令；由 `PRG_MainControl` 统一下发给温控与机器主控消费。
+
+    (* 机器级传感器与汇总状态。 *)
     gvl_stSensor: ST_MachineSensor;
     gvl_stStatus: ST_MachineStatus;
 
     (* 面板管理综合按键边界。
        每个逻辑键同时收口排序号、键值和灯值，供不同面板型号功能块按同一结构交互。
     *)
-    gvl_stPanelButtons: ST_PanelButtons;
+    gvl_ePanelModel: E_PanelModel;       // 顶层当前启用的硬件面板型号；由 `PRG_MainControl` 传给 `gvl_fbPanelDispatcher` 做型号分发。
+    gvl_stPanelIO: ST_PanelIO;           // 顶层面板原始 IO 边界；由 IO 层回写输入字，并由面板调度块回写输出字。
+    gvl_stPanelButtons: ST_PanelButtons; // 顶层综合面板按键边界；统一收口逻辑键排序号、真实输入位、当前键值和灯值。
 
     (* 各执行模块输出轴镜像。 *)
     gvl_stClampAxis: ST_AxisRefHyd;

@@ -1,7 +1,7 @@
 ﻿(*
   PRG_MainControl 程序
   功能：
-  1. 作为 PLC 工程唯一有效的主任务入口，统一调度 HMI 参数同步、顶层温控和机器主控。
+  1. 作为 PLC 工程唯一有效的主任务入口，统一调度 HMI 参数同步、面板调度、命令仲裁、顶层温控和机器主控。
   2. 本程序必须绑定到 1ms 基础任务；工艺逻辑由本程序在顶层生成固定 10ms 节拍后送给 `FB_MachineController`。
   3. 温控块 `FB_EK312` 必须由本程序在顶层直接调用，并由本程序在顶层生成固定 100ms 节拍后送给温控块刷新计算。
   4. 所有共享数据都通过 `全局变量\GlobalVars.st` 访问，不再拆分到多个顶层入口。
@@ -20,6 +20,7 @@ VAR
     bLogicTick10ms: BOOL := FALSE;                // TRUE=当前扫描周期命中一次 10ms 逻辑拍，允许主控刷新模式路由和自动流程。
     uiTempTickDiv: UINT := 0;                     // 100ms 温控节拍分频计数器，按 1ms 逻辑拍累加到第 100 拍后清零。
     bTempTick100ms: BOOL := FALSE;               // TRUE=当前扫描周期命中一次 100ms 逻辑拍，允许温控系统刷新一轮计算。
+    stBaseCommandSnapshot: ST_MachineCommand;     // 当前扫描周期仲裁前的基础机器命令快照；用于保留外部入口写入的公共启动/停止/复位命令。
 END_VAR
 
 
@@ -35,13 +36,12 @@ ELSE
     uiLogicTickDiv := uiLogicTickDiv + 1;       // 尚未达到 10ms 时继续累加 1ms 基础拍计数。
 END_IF;
 
-IF bTempTick100ms THEN                          // 先把 100ms 节拍标志清零，只有命中分频点时才在当前扫描周期拉高一次。
-    IF uiTempTickDiv >= 99 THEN                  // 当 1ms 基础拍累计满 100 次时，输出一次 100ms 逻辑节拍。
-        uiTempTickDiv := 0;                     // 100ms 分频计数器清零，开始统计下一轮 100ms 周期。
-        bTempTick100ms := TRUE;                // 标记本扫描周期允许刷新一次温控计算。
-    ELSE
-        uiTempTickDiv := uiTempTickDiv + 1;     // 尚未达到 100ms 时继续累加 1ms 基础拍计数。
-    END_IF;
+bTempTick100ms := FALSE;                        // 先把 100ms 节拍标志清零，只有命中分频点时才在当前扫描周期拉高一次。
+IF uiTempTickDiv >= 99 THEN                     // 当 1ms 基础拍累计满 100 次时，输出一次 100ms 逻辑节拍。
+    uiTempTickDiv := 0;                         // 100ms 分频计数器清零，开始统计下一轮 100ms 周期。
+    bTempTick100ms := TRUE;                     // 标记本扫描周期允许刷新一次温控计算。
+ELSE
+    uiTempTickDiv := uiTempTickDiv + 1;         // 尚未达到 100ms 时继续累加 1ms 基础拍计数。
 END_IF;
 
 
@@ -54,21 +54,39 @@ gvl_fbHMIParaInterface(
     stStatus => gvl_stHMIParaStatus             // 回写 HMI 参数接口状态，供画面显示同步结果和拦截原因。
 );
 
+(* 再先调度顶层面板，把原始面板 IO 解码为按键结构，并把关键按键回灌到独立面板命令源。 *)
+gvl_fbPanelDispatcher(
+    stPanelButtons := gvl_stPanelButtons,       // 把全局综合面板按键边界交给面板调度块，统一回写键值和灯值。
+    stPanelIO := gvl_stPanelIO,                 // 把全局面板原始 IO 边界交给面板调度块，统一处理输入解码与输出汇总。
+    stCommandSource := gvl_stPanelCommandSource, // 把全局面板命令源边界交给面板调度块，让面板先只回灌自己的命令来源。
+    ePanelModel := gvl_ePanelModel,             // 传入当前顶层选择的硬件面板型号，决定本拍调度哪个具体型号块。
+    stStatus := gvl_stStatus,                   // 传入上一拍机器总状态，供面板调度块回写模式灯和动作灯。
+    stSensor := gvl_stSensor                    // 传入现场传感器边界，供面板调度块回写马达/液压类状态灯。
+);
+
+(* 再把各命令源统一仲裁为最终机器命令，供顶层温控和机器主控共同消费。 *)
+stBaseCommandSnapshot := gvl_stCommand;         // 先拍下当前扫描周期外部入口已经写入的基础机器命令，避免仲裁时直接覆盖掉公共控制字段。
+
+gvl_fbCommandArbiter(
+    stBaseCommandIn := stBaseCommandSnapshot,         // 把当前扫描周期的基础机器命令快照送入仲裁块，保留外部入口写入的公共控制字段。
+    stPanelCommandSourceIn := gvl_stPanelCommandSource, // 把面板命令源送入顶层仲裁块，当前版本只用该源覆盖模式与手动字段。
+    stCommandOut => gvl_stCommand                      // 回写仲裁后的最终机器命令，供后续顶层功能块统一消费。
+);
+
 
 (* 顶层独立处理温控系统，不再把温控结果并入机器主控。 *)
-IF bTempTick100ms THEN  
-    gvl_fbEK312(
-        bStart := gvl_stCommand.stManual.bTempStart, // 直接把顶层温控启动命令送入温控块。
-        bStop := gvl_stCommand.bStop,                // 机器停止时同步通知温控块退出执行态。
-        bReset := gvl_stCommand.bReset,              // 机器复位时同步清空温控块内部状态。
-        bR0 := gvl_stCommand.stManual.bR0,           // 直接把第 0 组人工加热命令送入温控块。
-        bR1 := gvl_stCommand.stManual.bR1,           // 直接把第 1 组人工加热命令送入温控块。
-        bR2 := gvl_stCommand.stManual.bR2,           // 直接把第 2 组人工加热命令送入温控块。
-        bR3 := gvl_stCommand.stManual.bR3,           // 直接把第 3 组人工加热命令送入温控块。
-        stInPara := gvl_stPara.stEK312InPara,        // 把在线温控参数传给顶层温控块做 100ms 刷新计算。
-        stOutPara => gvl_stTempOutPara               // 顶层直接回写温控输出结构，供 HMI 和其他顶层逻辑读取。
-    );
-END_IF;
+gvl_fbEK312(
+    bStart := gvl_stCommand.stManual.bTempStart, // 直接把顶层温控启动命令送入温控块。
+    bStop := gvl_stCommand.bStop,                // 机器停止时同步通知温控块退出执行态。
+    bReset := gvl_stCommand.bReset,              // 机器复位时同步清空温控块内部状态。
+    bLogicTick100msIn := bTempTick100ms,         // 把顶层 100ms 温控刷新拍送入温控块，让温控块每拍都被调用但只在该拍做一轮计算。
+    bR0 := gvl_stCommand.stManual.bR0,           // 直接把第 0 组人工加热命令送入温控块。
+    bR1 := gvl_stCommand.stManual.bR1,           // 直接把第 1 组人工加热命令送入温控块。
+    bR2 := gvl_stCommand.stManual.bR2,           // 直接把第 2 组人工加热命令送入温控块。
+    bR3 := gvl_stCommand.stManual.bR3,           // 直接把第 3 组人工加热命令送入温控块。
+    stInPara := gvl_stPara.stEK312InPara,        // 把在线温控参数传给顶层温控块做 100ms 刷新计算。
+    stOutPara => gvl_stTempOutPara               // 顶层直接回写温控输出结构，供 HMI 和其他顶层逻辑读取。
+);
 
 
 (* 再执行机器主控，由主控统一驱动模式管理、自动流程和全部执行模块。 *)

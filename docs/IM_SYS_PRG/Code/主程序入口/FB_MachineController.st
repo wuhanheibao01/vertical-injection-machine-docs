@@ -2,15 +2,16 @@
   FB_MachineController 功能块
   功能：
   1. 提供真正的机器级执行层，负责实例化并周期调用所有模块级功能块。
-  2. 在同一处完成手动、调模、半自动、全自动四类命令来源的切换与分发。
+  2. 通过内部辅助层完成模式解析、命令合成，并把最终模块命令分发给各执行块。
   3. 把模块状态、轴命令和自动流程状态汇总为统一的机器级状态输出。
 
   调用关系：
-  1. `FB_AutoCycle` 只负责调度，不直接驱动任何轴。
-  2. 本功能块负责把 `FB_AutoCycle` 的启动/复位/模式输出接到实际执行模块。
+  1. `FB_MachineModeResolver` 只负责模式解析，不直接驱动任何执行模块。
+  2. `FB_AutoCycle` 只负责调度，不直接驱动任何轴；`FB_MachineCommandComposer` 负责把自动、手动和调模命令收口为最终模块命令。
   3. 各执行模块内部各自持有 `FB_HydAxis` 并自行处理轴使能、轴配置和轴状态并入。
-  4. `FB_EK312` 由 `PROGRAM PRG_MainControl` 顶层独立调用，本功能块不处理温控块接口和温控状态。
-  5. 必须由 `PROGRAM PRG_MainControl` 以 1ms 基础任务调用本功能块；10ms 工艺节拍也必须由顶层生成后通过输入接口送入本块。
+  4. `FB_MachineStatusAggregator` 负责把自动流程和模块状态收口为机器总状态。
+  5. `FB_EK312` 由 `PROGRAM PRG_MainControl` 顶层独立调用，本功能块不处理温控块接口和温控状态。
+  6. 必须由 `PROGRAM PRG_MainControl` 以 1ms 基础任务调用本功能块；10ms 工艺节拍也必须由顶层生成后通过输入接口送入本块。
 *)
 FUNCTION_BLOCK FB_MachineController
 VAR_INPUT
@@ -74,19 +75,12 @@ VAR
     stEjectAxisBase: ST_AxisRefHyd;               // 基础托模块独占使用的托模轴缓存，避免与托模模式块直接争抢同一输出结构。
     stEjectAxisMode: ST_AxisRefHyd;               // 托模模式块独占使用的托模轴缓存，最终再由主控择一输出到 `stEjectAxis`。
 
-    (* 模式判定。
-       bModeChanged 用于在模式切换的当个扫描周期统一打一拍停止，
-       防止某个模块沿用上一模式留下的执行状态继续动作。
-    *)
-    bManualModeActive: BOOL := FALSE;             // TRUE=当前主控解析出的机器模式为手动模式。
-    bMoldAdjustModeActive: BOOL := FALSE;         // TRUE=当前主控解析出的机器模式为调模模式。
-    bSemiAutoModeActive: BOOL := FALSE;           // TRUE=当前主控解析出的机器模式为半自动模式。
-    bFullAutoModeActive: BOOL := FALSE;           // TRUE=当前主控解析出的机器模式为全自动模式。
-    bModeChanged: BOOL := FALSE;                  // TRUE=本拍检测到机器模式发生切换，用于打一拍全局停止保护。
-    uiLastMachineMode: UINT := 0;                 // 上一扫描周期保存的机器模式号，用于与当前模式比较判断是否切模。
-    uiResolvedAutoMode: UINT := 0;                // 解析后的自动模式号，0=非自动 1=半自动 2=全自动，专供 `FB_AutoCycle` 使用。
-    bGlobalStop: BOOL := FALSE;                   // 主控内部统一停止位，收口停机命令、停机模式和切模保护停止。
-    bAutoReadyLocal: BOOL := FALSE;               // 自动循环可启动条件综合结果，最终写入 `stStatus.bAutoReady`。
+    (* 主控辅助分层实例与结构。 *)
+    fbModeResolver: FB_MachineModeResolver;       // 模式解析辅助实例；负责解析机器模式、切模状态和统一停止位。
+    fbCommandComposer: FB_MachineCommandComposer; // 命令合成辅助实例；负责把手动、调模和自动命令收口为最终模块命令。
+    fbStatusAggregator: FB_MachineStatusAggregator; // 状态汇总辅助实例；负责把自动流程与模块状态收口为机器总状态。
+    stModeState: ST_MachineModeState;             // 当前扫描周期解析出的模式状态结构；供主控内部统一消费。
+    stModuleCommands: ST_MachineModuleCommands;   // 当前扫描周期合成出的最终模块命令集合；供执行模块统一消费。
     bUseEjectModeManual: BOOL := FALSE;           // TRUE=当前手动命令应切换到托模组合模式而不是基础托模块。
 
     (* 自动流程输出命令缓存。 *)
@@ -111,32 +105,6 @@ VAR
     bAutoEjectStart: BOOL := FALSE;               // 自动流程输出的托模启动命令缓存。
     bAutoEjectReset: BOOL := FALSE;               // 自动流程输出的托模复位命令缓存。
     uiAutoEjectMode: UINT := 0;                   // 自动流程输出的托模动作模式号缓存。
-
-    (* 主控层下发给各模块的最终命令。 *)
-    bClampStartCmd: BOOL := FALSE;                // 主控最终下发给合模块的启动命令。
-    bClampResetCmd: BOOL := FALSE;                // 主控最终下发给合模块的复位命令。
-    uiClampModeCmd: UINT := 0;                    // 主控最终下发给合模块的动作模式号。
-    bMoldAdjustStartCmd: BOOL := FALSE;           // 主控最终下发给调模块的启动命令。
-    bMoldAdjustResetCmd: BOOL := FALSE;           // 主控最终下发给调模块的复位命令。
-    uiMoldAdjustModeCmd: UINT := 0;               // 主控最终下发给调模块的动作模式号。
-    bNozzleStartCmd: BOOL := FALSE;               // 主控最终下发给座台模块的启动命令。
-    bNozzleResetCmd: BOOL := FALSE;               // 主控最终下发给座台模块的复位命令。
-    uiNozzleModeCmd: UINT := 0;                   // 主控最终下发给座台模块的动作模式号。
-    bInjectStartCmd: BOOL := FALSE;               // 主控最终下发给射胶模块的启动命令。
-    bInjectResetCmd: BOOL := FALSE;               // 主控最终下发给射胶模块的复位命令。
-    uiInjectModeCmd: UINT := 0;                   // 主控最终下发给射胶模块的动作模式号。
-    bMeterStartCmd: BOOL := FALSE;                // 主控最终下发给储料模块的启动命令。
-    bMeterResetCmd: BOOL := FALSE;                // 主控最终下发给储料模块的复位命令。
-    bEjectStartCmd: BOOL := FALSE;                // 主控最终下发给基础托模块的启动命令。
-    bEjectResetCmd: BOOL := FALSE;                // 主控最终下发给基础托模块的复位命令。
-    uiEjectModeCmd: UINT := 0;                    // 主控最终下发给基础托模块的动作模式号。
-    bEjectModeStartCmd: BOOL := FALSE;            // 主控最终下发给托模模式块的启动命令。
-    bEjectModeResetCmd: BOOL := FALSE;            // 主控最终下发给托模模式块的复位命令。
-    uiEjectPatternModeCmd: UINT := 0;             // 主控最终下发给托模模式块的组合模式号。
-    uiEjectTimesCmd: UINT := 0;                   // 主控最终下发给托模模式块的循环次数/震动次数。
-    bCoreStartCmd: BOOL := FALSE;                 // 主控最终下发给中子模块的启动命令。
-    bCoreResetCmd: BOOL := FALSE;                 // 主控最终下发给中子模块的复位命令。
-    uiCoreModeCmd: UINT := 0;                     // 主控最终下发给中子模块的动作模式号。
 
     (* 子模块状态缓存。 *)
     bClampBusy: BOOL := FALSE;                    // 合模块 Busy 状态缓存。
@@ -230,28 +198,17 @@ END_VAR
    2. 不参与自动循环。
    3. 其他模块保持停机或复位状态，避免试模阶段误动作。
 *)
-bManualModeActive := (stCommand.uiMachineMode = 1);                                   // 模式号为 1 时，主控标记当前进入手动模式。
-bMoldAdjustModeActive := (stCommand.uiMachineMode = 4);                               // 模式号为 4 时，主控标记当前进入调模模式。
-bSemiAutoModeActive := (stCommand.uiMachineMode = 2);                                 // 模式号为 2 时，主控标记当前进入半自动模式。
-bFullAutoModeActive := (stCommand.uiMachineMode = 3);                                 // 模式号为 3 时，主控标记当前进入全自动模式。
-bModeChanged := (uiLastMachineMode <> stCommand.uiMachineMode);                       // 当前模式号与上一拍不同则认为发生了模式切换。
-uiLastMachineMode := stCommand.uiMachineMode;                                          // 保存本拍模式号，供下一拍继续检测是否切模。
-bGlobalStop := stCommand.bStop OR (stCommand.uiMachineMode = 0) OR bModeChanged;      // 停止命令、停机模式或切模保护任一出现，都统一触发主控总停止。
-
-IF bSemiAutoModeActive THEN                                                            // 半自动模式时，把自动流程工作模式解析为 1。
-    uiResolvedAutoMode := 1;                                                            // `FB_AutoCycle` 用 1 表示半自动。
-ELSIF bFullAutoModeActive THEN                                                          // 全自动模式时，把自动流程工作模式解析为 2。
-    uiResolvedAutoMode := 2;                                                            // `FB_AutoCycle` 用 2 表示全自动。
-ELSE
-    uiResolvedAutoMode := 0;                                                            // 非自动模式时，明确告知自动流程当前不参与调度。
-END_IF;
+fbModeResolver(
+    stCommand := stCommand,                 // 把最终机器命令送入模式解析层，统一生成当前扫描周期的模式状态结构。
+    stModeState => stModeState              // 回收本拍解析出的模式状态结构，供后续自动流程、命令合成和状态汇总使用。
+);
 
 IF bLogicTick10msIn THEN                                                      // 手动路由、调模路由和自动流程只在顶层送来的 10ms 逻辑拍到来时刷新一次。
     fbManualMode(
-        bStop := bGlobalStop,                                                 // 把主控统一停止位送给手动路由块，切模或停机时立即撤销手动动作。
+        bStop := stModeState.bGlobalStop,                                     // 把主控统一停止位送给手动路由块，切模或停机时立即撤销手动动作。
         bEStop := stCommand.bEStop,                                           // 把急停信号送给手动路由块，确保急停时手动命令立刻失效。
         bReset := stCommand.bReset,                                           // 把顶层复位信号送给手动路由块，便于清空手动命令状态。
-        bActive := bManualModeActive,                                         // 只有机器处于手动模式时，手动路由块才输出有效动作命令。
+        bActive := stModeState.bManualModeActive,                             // 只有机器处于手动模式时，手动路由块才输出有效动作命令。
         stManual := stCommand.stManual,                                       // 把完整手动命令结构送给手动路由块解析。
         bClampStart => bManualClampStart,                                     // 回收手动路由块给出的合模启动命令。
         uiClampMode => uiManualClampMode,                                     // 回收手动路由块给出的合模模式号。
@@ -272,10 +229,10 @@ IF bLogicTick10msIn THEN                                                      //
     );
 
     fbMoldAdjustMode(
-        bStop := bGlobalStop,                                                 // 把主控统一停止位送给调模路由块，切模或停机时立即撤销调模动作。
+        bStop := stModeState.bGlobalStop,                                     // 把主控统一停止位送给调模路由块，切模或停机时立即撤销调模动作。
         bEStop := stCommand.bEStop,                                           // 把急停信号送给调模路由块，确保急停时调模命令立刻失效。
         bReset := stCommand.bReset,                                           // 把顶层复位信号送给调模路由块，便于清空调模命令状态。
-        bActive := bMoldAdjustModeActive,                                     // 只有机器处于调模模式时，调模路由块才输出有效动作命令。
+        bActive := stModeState.bMoldAdjustModeActive,                         // 只有机器处于调模模式时，调模路由块才输出有效动作命令。
         stManual := stCommand.stManual,                                       // 把完整手动/调模命令结构送给调模路由块解析。
         bClampStart => bManualClampStart,                                     // 回收调模路由块给出的锁模启动命令。
         uiClampMode => uiManualClampMode,                                     // 回收调模路由块给出的锁模模式号。
@@ -289,11 +246,11 @@ IF bLogicTick10msIn THEN                                                      //
        一旦退出自动模式，就用 bStop 把自动流程拉回空闲态。
     *)
     fbAutoCycle(
-        bStart := stCommand.bStart AND (uiResolvedAutoMode > 0),
-        bStop := stCommand.bStop OR (uiResolvedAutoMode = 0),
+        bStart := stCommand.bStart AND (stModeState.uiResolvedAutoMode > 0),
+        bStop := stCommand.bStop OR (stModeState.uiResolvedAutoMode = 0),
         bEStop := stCommand.bEStop,
         bReset := stCommand.bReset,
-        uiAutoMode := uiResolvedAutoMode,
+        uiAutoMode := stModeState.uiResolvedAutoMode,
         stAutoPara := stPara.stAutoPara,
         bDoorClosed := stSensor.bDoorClosed,
         bHydReady := stSensor.bHydReady,
@@ -342,128 +299,53 @@ IF bLogicTick10msIn THEN                                                      //
         uiEjectMode => uiAutoEjectMode
     );
 
-    (* 先给各模块命令做安全缺省值。
-       这样在模式切换时，未被当前模式接管的模块会自然保持停止/复位，不会沿用旧命令。
-    *)
-    bClampStartCmd := FALSE;                      // 默认不给合模块启动命令，避免未被接管时沿用旧动作。
-    bClampResetCmd := stCommand.bReset;           // 合模块默认只响应顶层复位命令。
-    uiClampModeCmd := 0;                          // 合模块默认模式号清零，表示当前无有效动作。
-
-    bMoldAdjustStartCmd := FALSE;                 // 默认不给调模块启动命令，避免未被接管时沿用旧动作。
-    bMoldAdjustResetCmd := stCommand.bReset;      // 调模块默认只响应顶层复位命令。
-    uiMoldAdjustModeCmd := 0;                     // 调模块默认模式号清零，表示当前无有效动作。
-
-    bNozzleStartCmd := FALSE;                     // 默认不给座台模块启动命令，避免未被接管时沿用旧动作。
-    bNozzleResetCmd := stCommand.bReset;          // 座台模块默认只响应顶层复位命令。
-    uiNozzleModeCmd := 0;                         // 座台模块默认模式号清零，表示当前无有效动作。
-
-    bInjectStartCmd := FALSE;                     // 默认不给射胶模块启动命令，避免未被接管时沿用旧动作。
-    bInjectResetCmd := stCommand.bReset;          // 射胶模块默认只响应顶层复位命令。
-    uiInjectModeCmd := 0;                         // 射胶模块默认模式号清零，表示当前无有效动作。
-
-    bMeterStartCmd := FALSE;                      // 默认不给储料模块启动命令，避免未被接管时沿用旧动作。
-    bMeterResetCmd := stCommand.bReset;           // 储料模块默认只响应顶层复位命令。
-
-    bEjectStartCmd := FALSE;                      // 默认不给基础托模块启动命令，避免未被接管时沿用旧动作。
-    bEjectResetCmd := stCommand.bReset;           // 基础托模块默认只响应顶层复位命令。
-    uiEjectModeCmd := 0;                          // 基础托模块默认模式号清零，表示当前无有效动作。
-
-    bEjectModeStartCmd := FALSE;                  // 默认不给托模模式块启动命令，避免组合模式在切模后残留。
-    bEjectModeResetCmd := TRUE;                   // 默认把托模模式块拉在复位态，只有明确使用时才释放。
-    uiEjectPatternModeCmd := 0;                   // 托模模式块默认模式号清零，表示当前不执行组合动作。
-    uiEjectTimesCmd := 0;                         // 托模模式块默认次数清零，避免沿用上一轮次数设定。
-
-    bCoreStartCmd := FALSE;                       // 默认不给中子模块启动命令，避免未被接管时沿用旧动作。
-    bCoreResetCmd := stCommand.bReset;            // 中子模块默认只响应顶层复位命令。
-    uiCoreModeCmd := 0;                           // 中子模块默认模式号清零，表示当前无有效动作。
-
-    (* 把不同来源的命令合并为“最终执行命令”。
-       1. 手动模式：手动命令由 `FB_ManualMode` 路由。
-       2. 调模模式：命令由 `FB_MoldAdjustMode` 路由，锁模强制进入调试方向，其他模块保持停机。
-       3. 自动模式：命令来自 `FB_AutoCycle` 的调度输出。
-    *)
-    IF bManualModeActive THEN
-        bClampStartCmd := bManualClampStart;          // 手动模式下，合模块直接接收手动命令路由结果。
-        uiClampModeCmd := uiManualClampMode;          // 手动模式下，合模块直接接收手动动作模式号。
-
-        bMoldAdjustStartCmd := bManualMoldAdjustStart;    // 手动模式下，调模块直接接收手动命令路由结果。
-        uiMoldAdjustModeCmd := uiManualMoldAdjustMode;    // 手动模式下，调模块直接接收手动动作模式号。
-
-        bNozzleStartCmd := bManualNozzleStart;        // 手动模式下，座台模块直接接收手动命令路由结果。
-        uiNozzleModeCmd := uiManualNozzleMode;        // 手动模式下，座台模块直接接收手动动作模式号。
-
-        bInjectStartCmd := bManualInjectStart;        // 手动模式下，射胶模块直接接收手动命令路由结果。
-        uiInjectModeCmd := uiManualInjectMode;        // 手动模式下，射胶模块直接接收手动动作模式号。
-
-        bMeterStartCmd := bManualMeterStart;          // 手动模式下，储料模块直接接收手动启动命令。
-
-        bCoreStartCmd := bManualCoreStart;            // 手动模式下，中子模块直接接收手动命令路由结果。
-        uiCoreModeCmd := uiManualCoreMode;            // 手动模式下，中子模块直接接收手动动作模式号。
-    ELSIF bMoldAdjustModeActive THEN
-        bClampStartCmd := bManualClampStart;          // 调模模式下，锁模动作仍由调模命令路由结果接管。
-        uiClampModeCmd := uiManualClampMode;          // 调模模式下，锁模模式号仍取自调模命令路由结果。
-
-        bMoldAdjustStartCmd := bManualMoldAdjustStart;    // 调模模式下，调模块直接接收调模命令路由结果。
-        uiMoldAdjustModeCmd := uiManualMoldAdjustMode;    // 调模模式下，调模块直接接收调模动作模式号。
-    ELSE
-        bClampStartCmd := bAutoClampStart;            // 自动模式下，合模块启动命令由自动流程输出接管。
-        bClampResetCmd := stCommand.bReset OR bAutoClampReset; // 自动模式下，顶层复位与自动步骤复位任一成立都可复位合模块。
-        uiClampModeCmd := uiAutoClampMode;            // 自动模式下，合模块动作模式号由自动流程给定。
-
-        bNozzleStartCmd := bAutoNozzleStart;          // 自动模式下，座台模块启动命令由自动流程输出接管。
-        bNozzleResetCmd := stCommand.bReset OR bAutoNozzleReset; // 自动模式下，顶层复位与自动步骤复位任一成立都可复位座台模块。
-        uiNozzleModeCmd := uiAutoNozzleMode;          // 自动模式下，座台模块动作模式号由自动流程给定。
-
-        bInjectStartCmd := bAutoInjectStart;          // 自动模式下，射胶模块启动命令由自动流程输出接管。
-        bInjectResetCmd := stCommand.bReset OR bAutoInjectReset; // 自动模式下，顶层复位与自动步骤复位任一成立都可复位射胶模块。
-        uiInjectModeCmd := uiAutoInjectMode;          // 自动模式下，射胶模块动作模式号由自动流程给定。
-
-        bMeterStartCmd := bAutoMeterStart;            // 自动模式下，储料模块启动命令由自动流程输出接管。
-        bMeterResetCmd := stCommand.bReset OR bAutoMeterReset;   // 自动模式下，顶层复位与自动步骤复位任一成立都可复位储料模块。
-
-        bEjectStartCmd := bAutoEjectStart;            // 自动模式下，基础托模块启动命令由自动流程输出接管。
-        bEjectResetCmd := stCommand.bReset OR bAutoEjectReset;   // 自动模式下，顶层复位与自动步骤复位任一成立都可复位基础托模块。
-        uiEjectModeCmd := uiAutoEjectMode;            // 自动模式下，基础托模块动作模式号由自动流程给定。
-    END_IF;
-
-    (* 托模既有基础动作块，也有组合模式块。
-       这里把两类命令拆开，避免两个功能块同时争抢同一输出轴。
-    *)
-    bUseEjectModeManual := bManualModeActive AND bManualEjectModeStart AND   // 只有手动模式下明确发起托模模式命令时，才允许切到组合托模块。
-        (uiManualEjectPatternMode >= 1) AND                                   // 模式号下限必须落在当前支持的托模组合模式范围内。
-        (uiManualEjectPatternMode <= 3);                                      // 模式号上限必须落在当前支持的托模组合模式范围内。
-
-    IF bManualModeActive AND (NOT bUseEjectModeManual) THEN
-        bEjectStartCmd := bManualEjectStart;          // 纯手动基础托模时，把基础托模启动命令路由给 `FB_Eject`。
-        bEjectResetCmd := stCommand.bReset;           // 纯手动基础托模时，基础托模块只响应顶层复位命令。
-        uiEjectModeCmd := uiManualEjectMode;          // 纯手动基础托模时，把手动托模模式号路由给 `FB_Eject`。
-    ELSIF NOT bManualModeActive THEN
-        bEjectStartCmd := bAutoEjectStart;            // 非手动模式下，基础托模块启动命令由自动流程输出接管。
-        bEjectResetCmd := stCommand.bReset OR bAutoEjectReset;   // 非手动模式下，顶层复位与自动步骤复位任一成立都可复位基础托模块。
-        uiEjectModeCmd := uiAutoEjectMode;            // 非手动模式下，基础托模块动作模式号由自动流程给定。
-    ELSE
-        bEjectStartCmd := FALSE;                      // 进入托模组合模式时，强制撤销基础托模块启动命令，避免双块抢轴。
-        bEjectResetCmd := TRUE;                       // 进入托模组合模式时，强制把基础托模块拉回复位态。
-        uiEjectModeCmd := 0;                          // 进入托模组合模式时，基础托模块模式号清零。
-    END_IF;
-
-    IF bUseEjectModeManual THEN
-        bEjectModeStartCmd := bManualEjectModeStart;      // 仅在手动组合托模生效时，把启动命令路由给 `FB_EjectMode`。
-        bEjectModeResetCmd := stCommand.bReset;           // 仅在手动组合托模生效时，把顶层复位命令路由给 `FB_EjectMode`。
-        uiEjectPatternModeCmd := uiManualEjectPatternMode; // 仅在手动组合托模生效时，把托模组合模式号路由给 `FB_EjectMode`。
-        uiEjectTimesCmd := uiManualEjectTimes;            // 仅在手动组合托模生效时，把循环次数/震动次数路由给 `FB_EjectMode`。
-    END_IF;
+    fbCommandComposer(
+        stCommand := stCommand,                                             // 把最终机器命令送入命令合成层，统一收口公共复位与手动命令结构。
+        stModeState := stModeState,                                         // 把本拍模式状态结构送入命令合成层，决定最终命令应由哪一类来源接管。
+        bManualClampStart := bManualClampStart,                             // 把手动或调模路由结果中的合模启动命令送入命令合成层。
+        uiManualClampMode := uiManualClampMode,                             // 把手动或调模路由结果中的合模模式号送入命令合成层。
+        bManualMoldAdjustStart := bManualMoldAdjustStart,                   // 把手动或调模路由结果中的调模启动命令送入命令合成层。
+        uiManualMoldAdjustMode := uiManualMoldAdjustMode,                   // 把手动或调模路由结果中的调模模式号送入命令合成层。
+        bManualNozzleStart := bManualNozzleStart,                           // 把手动路由结果中的座台启动命令送入命令合成层。
+        uiManualNozzleMode := uiManualNozzleMode,                           // 把手动路由结果中的座台模式号送入命令合成层。
+        bManualInjectStart := bManualInjectStart,                           // 把手动路由结果中的射胶启动命令送入命令合成层。
+        uiManualInjectMode := uiManualInjectMode,                           // 把手动路由结果中的射胶模式号送入命令合成层。
+        bManualMeterStart := bManualMeterStart,                             // 把手动路由结果中的储料启动命令送入命令合成层。
+        bManualEjectStart := bManualEjectStart,                             // 把手动路由结果中的基础托模启动命令送入命令合成层。
+        uiManualEjectMode := uiManualEjectMode,                             // 把手动路由结果中的基础托模模式号送入命令合成层。
+        bManualEjectModeStart := bManualEjectModeStart,                     // 把手动路由结果中的托模组合模式启动命令送入命令合成层。
+        uiManualEjectPatternMode := uiManualEjectPatternMode,               // 把手动路由结果中的托模组合模式号送入命令合成层。
+        uiManualEjectTimes := uiManualEjectTimes,                           // 把手动路由结果中的托模组合次数送入命令合成层。
+        bManualCoreStart := bManualCoreStart,                               // 把手动路由结果中的中子启动命令送入命令合成层。
+        uiManualCoreMode := uiManualCoreMode,                               // 把手动路由结果中的中子模式号送入命令合成层。
+        bAutoClampStart := bAutoClampStart,                                 // 把自动流程输出中的合模启动命令送入命令合成层。
+        bAutoClampReset := bAutoClampReset,                                 // 把自动流程输出中的合模复位命令送入命令合成层。
+        uiAutoClampMode := uiAutoClampMode,                                 // 把自动流程输出中的合模模式号送入命令合成层。
+        bAutoNozzleStart := bAutoNozzleStart,                               // 把自动流程输出中的座台启动命令送入命令合成层。
+        bAutoNozzleReset := bAutoNozzleReset,                               // 把自动流程输出中的座台复位命令送入命令合成层。
+        uiAutoNozzleMode := uiAutoNozzleMode,                               // 把自动流程输出中的座台模式号送入命令合成层。
+        bAutoInjectStart := bAutoInjectStart,                               // 把自动流程输出中的射胶启动命令送入命令合成层。
+        bAutoInjectReset := bAutoInjectReset,                               // 把自动流程输出中的射胶复位命令送入命令合成层。
+        uiAutoInjectMode := uiAutoInjectMode,                               // 把自动流程输出中的射胶模式号送入命令合成层。
+        bAutoMeterStart := bAutoMeterStart,                                 // 把自动流程输出中的储料启动命令送入命令合成层。
+        bAutoMeterReset := bAutoMeterReset,                                 // 把自动流程输出中的储料复位命令送入命令合成层。
+        bAutoEjectStart := bAutoEjectStart,                                 // 把自动流程输出中的基础托模启动命令送入命令合成层。
+        bAutoEjectReset := bAutoEjectReset,                                 // 把自动流程输出中的基础托模复位命令送入命令合成层。
+        uiAutoEjectMode := uiAutoEjectMode,                                 // 把自动流程输出中的基础托模模式号送入命令合成层。
+        stModuleCommands => stModuleCommands,                               // 回收本拍合成出的最终模块命令集合，供执行模块统一消费。
+        bUseEjectModeManual => bUseEjectModeManual                          // 回收当前托模是否切换到托模组合模式块的选择结果。
+    );
 END_IF;
 
 (* 依次调用执行模块。 *)
 fbClamp(
     ClampAxis := stClampAxis,
-    bStart := bClampStartCmd,
-    bStop := bGlobalStop,
+    bStart := stModuleCommands.bClampStart,
+    bStop := stModeState.bGlobalStop,
     bEStop := stCommand.bEStop,
-    bReset := bClampResetCmd,
-    bManualMode := bManualModeActive,
-    uiClampMode := uiClampModeCmd,
+    bReset := stModuleCommands.bClampReset,
+    bManualMode := stModeState.bManualModeActive,
+    uiClampMode := stModuleCommands.uiClampMode,
     stClampPara := stPara.stClampPara,
     bOpenStop := stSensor.bOpenStop,
     bCloseLowPres := stSensor.bCloseLowPres,
@@ -487,16 +369,16 @@ fbClamp(
 
 fbMoldAdjust(
     stMoldAdjustAxis := stMoldAdjustAxis,
-    bStart := bMoldAdjustStartCmd,
-    bStop := bGlobalStop OR (NOT (bManualModeActive OR bMoldAdjustModeActive)),
+    bStart := stModuleCommands.bMoldAdjustStart,
+    bStop := stModeState.bGlobalStop OR (NOT (stModeState.bManualModeActive OR stModeState.bMoldAdjustModeActive)),
     bEStop := stCommand.bEStop,
-    bReset := bMoldAdjustResetCmd,
+    bReset := stModuleCommands.bMoldAdjustReset,
     (* 这里只在“机器手动模式”下把整个调模块切到手动点动。
        当机器处于“调模模式”时，仍允许 uiMoldAdjustMode=1/2 按工艺段自动进退，
        也允许 uiMoldAdjustMode=3/4 进入手动点动，因此这里不直接把调模模式映射为 bManualMode=TRUE。
     *)
-    bManualMode := bManualModeActive,
-    uiMoldAdjustMode := uiMoldAdjustModeCmd,
+    bManualMode := stModeState.bManualModeActive,
+    uiMoldAdjustMode := stModuleCommands.uiMoldAdjustMode,
     stMoldAdjustPara := stPara.stMoldAdjustPara,
     bMoldAdjustInStop := stSensor.bMoldAdjustInStop,
     bMoldAdjustOutStop := stSensor.bMoldAdjustOutStop,
@@ -516,12 +398,12 @@ fbMoldAdjust(
 
 fbNozzle(
     stNozzleAxis := stNozzleAxis,
-    bStart := bNozzleStartCmd,
-    bStop := bGlobalStop,
+    bStart := stModuleCommands.bNozzleStart,
+    bStop := stModeState.bGlobalStop,
     bEStop := stCommand.bEStop,
-    bReset := bNozzleResetCmd,
-    bManualMode := bManualModeActive,
-    uiNozzleMode := uiNozzleModeCmd,
+    bReset := stModuleCommands.bNozzleReset,
+    bManualMode := stModeState.bManualModeActive,
+    uiNozzleMode := stModuleCommands.uiNozzleMode,
     stNozzlePara := stPara.stNozzlePara,
     bNozzleInStop := stSensor.bNozzleInStop,
     bNozzleOutStop := stSensor.bNozzleOutStop,
@@ -541,12 +423,12 @@ fbNozzle(
 
 fbInject(
     stInjectAxis := stInjectAxis,
-    bStart := bInjectStartCmd,
-    bStop := bGlobalStop,
+    bStart := stModuleCommands.bInjectStart,
+    bStop := stModeState.bGlobalStop,
     bEStop := stCommand.bEStop,
-    bReset := bInjectResetCmd,
-    bManualMode := bManualModeActive,
-    uiInjectMode := uiInjectModeCmd,
+    bReset := stModuleCommands.bInjectReset,
+    bManualMode := stModeState.bManualModeActive,
+    uiInjectMode := stModuleCommands.uiInjectMode,
     stInjectPara := stPara.stInjectPara,
     bInjSeg1Stop := stSensor.bInjSeg1Stop,
     bInjSeg2Stop := stSensor.bInjSeg2Stop,
@@ -569,11 +451,11 @@ fbInject(
 
 fbMeter(
     stMeterAxis := stMeterAxis,
-    bStart := bMeterStartCmd,
-    bStop := bGlobalStop,
+    bStart := stModuleCommands.bMeterStart,
+    bStop := stModeState.bGlobalStop,
     bEStop := stCommand.bEStop,
-    bReset := bMeterResetCmd,
-    bManualMode := bManualModeActive,
+    bReset := stModuleCommands.bMeterReset,
+    bManualMode := stModeState.bManualModeActive,
     stMeterPara := stPara.stMeterPara,
     bMeterStop := stSensor.bMeterStop,
     udiInjElecRulerVal := stSensor.udiInjElecRulerVal,
@@ -591,12 +473,12 @@ fbMeter(
 
 fbEject(
     stEjectAxis := stEjectAxisBase,
-    bStart := bEjectStartCmd,
-    bStop := bGlobalStop OR bUseEjectModeManual,
+    bStart := stModuleCommands.bEjectStart,
+    bStop := stModeState.bGlobalStop OR bUseEjectModeManual,
     bEStop := stCommand.bEStop,
-    bReset := bEjectResetCmd,
-    bManualMode := bManualModeActive,
-    uiEjectMode := uiEjectModeCmd,
+    bReset := stModuleCommands.bEjectReset,
+    bManualMode := stModeState.bManualModeActive,
+    uiEjectMode := stModuleCommands.uiEjectMode,
     stEjectPara := stPara.stEjectPara,
     bEjectInStop := stSensor.bEjectInStop,
     bEjectOutStop := stSensor.bEjectOutStop,
@@ -616,12 +498,12 @@ fbEject(
 
 fbEjectMode(
     stEjectAxis := stEjectAxisMode,
-    bStart := bEjectModeStartCmd,
-    bStop := bGlobalStop OR (NOT bUseEjectModeManual),
+    bStart := stModuleCommands.bEjectModeStart,
+    bStop := stModeState.bGlobalStop OR (NOT bUseEjectModeManual),
     bEStop := stCommand.bEStop,
-    bReset := bEjectModeResetCmd,
-    uiEjectMode := uiEjectPatternModeCmd,
-    uiEjectTimes := uiEjectTimesCmd,
+    bReset := stModuleCommands.bEjectModeReset,
+    uiEjectMode := stModuleCommands.uiEjectPatternMode,
+    uiEjectTimes := stModuleCommands.uiEjectTimes,
     stEjectPara := stPara.stEjectPara,
     bEjectInStop := stSensor.bEjectInStop,
     bEjectOutStop := stSensor.bEjectOutStop,
@@ -641,12 +523,12 @@ fbEjectMode(
 
 fbCore(
     stCoreAxis := stCoreAxis,
-    bStart := bCoreStartCmd,
-    bStop := bGlobalStop OR (NOT bManualModeActive),
+    bStart := stModuleCommands.bCoreStart,
+    bStop := stModeState.bGlobalStop OR (NOT stModeState.bManualModeActive),
     bEStop := stCommand.bEStop,
-    bReset := bCoreResetCmd,
-    bManualMode := bManualModeActive,
-    uiCoreMode := uiCoreModeCmd,
+    bReset := stModuleCommands.bCoreReset,
+    bManualMode := stModeState.bManualModeActive,
+    uiCoreMode := stModuleCommands.uiCoreMode,
     stCorePara := stPara.stCorePara,
     bCoreInStop := stSensor.bCoreInStop,
     bCoreOutStop := stSensor.bCoreOutStop,
@@ -691,134 +573,74 @@ FOR uiIndex := 1 TO 8 DO
 END_FOR;
 
 (* 机器级状态汇总。 *)
-bAutoReadyLocal := stSensor.bDoorClosed AND stSensor.bHydReady AND                           // 自动准备就绪必须满足门已关和液压已就绪两项基础前提。
-    stSensor.bSystemNoAlarm AND (NOT bClampAlarm) AND (NOT bMoldAdjustAlarm) AND            // 自动准备就绪还要求系统级与合模/调模块无报警。
-    (NOT bNozzleAlarm) AND (NOT bInjectAlarm) AND (NOT bMeterAlarm) AND                      // 自动准备就绪还要求座台/射胶/储料模块无报警。
-    (NOT bSelectedEjectAlarm) AND (NOT bCoreAlarm) AND (NOT bAutoAlarm);                     // 自动准备就绪还要求托模/中子/自动流程本身均无报警。
-
-stStatus.uiMachineMode := stCommand.uiMachineMode;
-stStatus.bManualModeActive := bManualModeActive;
-stStatus.bMoldAdjustModeActive := bMoldAdjustModeActive;
-stStatus.bSemiAutoModeActive := bSemiAutoModeActive;
-stStatus.bFullAutoModeActive := bFullAutoModeActive;
-stStatus.bAutoReady := bAutoReadyLocal;
-stStatus.uiCycleCount := uiAutoCycleCount;
-
-stStatus.bAutoBusy := bAutoBusy;
-stStatus.bAutoDone := bAutoDone;
-stStatus.bAutoAlarm := bAutoAlarm;
-stStatus.dwAutoAlarmID := dwAutoAlarmID;
-
-stStatus.bClampBusy := bClampBusy;
-stStatus.bClampDone := bClampDone;
-stStatus.bClampAlarm := bClampAlarm;
-stStatus.dwClampAlarmID := dwClampAlarmID;
-stStatus.bMoldOpened := bMoldOpened;
-stStatus.bMoldClosed := bMoldClosed;
-
-stStatus.bMoldAdjustBusy := bMoldAdjustBusy;
-stStatus.bMoldAdjustDone := bMoldAdjustDone;
-stStatus.bMoldAdjustAlarm := bMoldAdjustAlarm;
-stStatus.dwMoldAdjustAlarmID := dwMoldAdjustAlarmID;
-stStatus.bMoldAdjustIned := bMoldAdjustIned;
-stStatus.bMoldAdjustOuted := bMoldAdjustOuted;
-
-stStatus.bNozzleBusy := bNozzleBusy;
-stStatus.bNozzleDone := bNozzleDone;
-stStatus.bNozzleAlarm := bNozzleAlarm;
-stStatus.dwNozzleAlarmID := dwNozzleAlarmID;
-stStatus.bNozzleIned := bNozzleIned;
-stStatus.bNozzleOuted := bNozzleOuted;
-
-stStatus.bInjectBusy := bInjectBusy;
-stStatus.bInjectDone := bInjectDone;
-stStatus.bInjectAlarm := bInjectAlarm;
-stStatus.dwInjectAlarmID := dwInjectAlarmID;
-stStatus.bInjected := bInjected;
-stStatus.bHeld := bHeld;
-stStatus.bSuckBacked := bSuckBacked;
-
-stStatus.bMeterBusy := bMeterBusy;
-stStatus.bMeterDone := bMeterDone;
-stStatus.bMeterAlarm := bMeterAlarm;
-stStatus.dwMeterAlarmID := dwMeterAlarmID;
-stStatus.bMetered := bMetered;
-
-stStatus.bEjectModeSelected := bUseEjectModeManual;
-stStatus.bEjectBusy := bSelectedEjectBusy;
-stStatus.bEjectDone := bSelectedEjectDone;
-stStatus.bEjectAlarm := bSelectedEjectAlarm;
-stStatus.dwEjectAlarmID := dwSelectedEjectAlarmID;
-stStatus.bEjectIned := bSelectedEjectIned;
-stStatus.bEjectOuted := bSelectedEjectOuted;
-
-stStatus.bCoreBusy := bCoreBusy;
-stStatus.bCoreDone := bCoreDone;
-stStatus.bCoreAlarm := bCoreAlarm;
-stStatus.dwCoreAlarmID := dwCoreAlarmID;
-stStatus.bCoreIned := bCoreIned;
-stStatus.bCoreOuted := bCoreOuted;
-
-stStatus.bMachineBusy := bAutoBusy OR bClampBusy OR bMoldAdjustBusy OR bNozzleBusy OR bInjectBusy OR
-    bMeterBusy OR bSelectedEjectBusy OR bCoreBusy;
-
-IF uiResolvedAutoMode > 0 THEN
-    stStatus.bMachineDone := bAutoDone;
-ELSE
-    stStatus.bMachineDone := bClampDone OR bMoldAdjustDone OR bNozzleDone OR bInjectDone OR
-        bMeterDone OR bSelectedEjectDone OR bCoreDone;
-END_IF;
-
-stStatus.bMachineAlarm := bAutoAlarm OR bClampAlarm OR bMoldAdjustAlarm OR bNozzleAlarm OR
-    bInjectAlarm OR bMeterAlarm OR bSelectedEjectAlarm OR bCoreAlarm;
-
-IF bAutoAlarm THEN
-    stStatus.dwMachineAlarmID := dwAutoAlarmID;
-ELSIF bClampAlarm THEN
-    stStatus.dwMachineAlarmID := dwClampAlarmID;
-ELSIF bMoldAdjustAlarm THEN
-    stStatus.dwMachineAlarmID := dwMoldAdjustAlarmID;
-ELSIF bNozzleAlarm THEN
-    stStatus.dwMachineAlarmID := dwNozzleAlarmID;
-ELSIF bInjectAlarm THEN
-    stStatus.dwMachineAlarmID := dwInjectAlarmID;
-ELSIF bMeterAlarm THEN
-    stStatus.dwMachineAlarmID := dwMeterAlarmID;
-ELSIF bSelectedEjectAlarm THEN
-    stStatus.dwMachineAlarmID := dwSelectedEjectAlarmID;
-ELSIF bCoreAlarm THEN
-    stStatus.dwMachineAlarmID := dwCoreAlarmID;
-ELSE
-    stStatus.dwMachineAlarmID := DWORD#0;
-END_IF;
-
-(* 当前动作提示优先显示自动流程；若不在自动流程中，则显示当前实际运行的模块。 *)
-stStatus.uiMachineActHint := 0;
-stStatus.uiMachineActTime := 0;
-
-IF (uiResolvedAutoMode > 0) AND (bAutoBusy OR bAutoDone OR bAutoAlarm) THEN
-    stStatus.uiMachineActHint := uiAutoActHint;
-    stStatus.uiMachineActTime := uiAutoActTime;
-ELSIF bClampBusy OR bClampDone OR bClampAlarm THEN
-    stStatus.uiMachineActHint := uiClampActHint;
-    stStatus.uiMachineActTime := uiClampActTime;
-ELSIF bMoldAdjustBusy OR bMoldAdjustDone OR bMoldAdjustAlarm THEN
-    stStatus.uiMachineActHint := uiMoldAdjustActHint;
-    stStatus.uiMachineActTime := uiMoldAdjustActTime;
-ELSIF bNozzleBusy OR bNozzleDone OR bNozzleAlarm THEN
-    stStatus.uiMachineActHint := uiNozzleActHint;
-    stStatus.uiMachineActTime := uiNozzleActTime;
-ELSIF bInjectBusy OR bInjectDone OR bInjectAlarm THEN
-    stStatus.uiMachineActHint := uiInjectActHint;
-    stStatus.uiMachineActTime := uiInjectActTime;
-ELSIF bMeterBusy OR bMeterDone OR bMeterAlarm THEN
-    stStatus.uiMachineActHint := uiMeterActHint;
-    stStatus.uiMachineActTime := uiMeterActTime;
-ELSIF bSelectedEjectBusy OR bSelectedEjectDone OR bSelectedEjectAlarm THEN
-    stStatus.uiMachineActHint := uiSelectedEjectActHint;
-    stStatus.uiMachineActTime := uiSelectedEjectActTime;
-ELSIF bCoreBusy OR bCoreDone OR bCoreAlarm THEN
-    stStatus.uiMachineActHint := uiCoreActHint;
-    stStatus.uiMachineActTime := uiCoreActTime;
-END_IF;
+fbStatusAggregator(
+    stCommand := stCommand,                           // 把最终机器命令送入状态汇总层，回写当前机器模式号。
+    stSensor := stSensor,                             // 把现场传感器边界送入状态汇总层，计算自动准备就绪综合结果。
+    stModeState := stModeState,                       // 把本拍模式状态结构送入状态汇总层，回写当前模式与自动模式号。
+    bAutoBusy := bAutoBusy,                           // 把自动流程 Busy 状态送入状态汇总层。
+    bAutoDone := bAutoDone,                           // 把自动流程 Done 状态送入状态汇总层。
+    bAutoAlarm := bAutoAlarm,                         // 把自动流程 Alarm 状态送入状态汇总层。
+    dwAutoAlarmID := dwAutoAlarmID,                   // 把自动流程报警码送入状态汇总层。
+    uiAutoActHint := uiAutoActHint,                   // 把自动流程动作提示号送入状态汇总层。
+    uiAutoActTime := uiAutoActTime,                   // 把自动流程动作持续时间送入状态汇总层。
+    uiAutoCycleCount := uiAutoCycleCount,             // 把自动流程累计循环次数送入状态汇总层。
+    bClampBusy := bClampBusy,                         // 把合模块 Busy 状态送入状态汇总层。
+    bClampDone := bClampDone,                         // 把合模块 Done 状态送入状态汇总层。
+    bClampAlarm := bClampAlarm,                       // 把合模块 Alarm 状态送入状态汇总层。
+    dwClampAlarmID := dwClampAlarmID,                 // 把合模块报警码送入状态汇总层。
+    uiClampActHint := uiClampActHint,                 // 把合模块动作提示号送入状态汇总层。
+    uiClampActTime := uiClampActTime,                 // 把合模块动作持续时间送入状态汇总层。
+    bMoldOpened := bMoldOpened,                       // 把开模到位状态送入状态汇总层。
+    bMoldClosed := bMoldClosed,                       // 把合模到位状态送入状态汇总层。
+    bMoldAdjustBusy := bMoldAdjustBusy,               // 把调模块 Busy 状态送入状态汇总层。
+    bMoldAdjustDone := bMoldAdjustDone,               // 把调模块 Done 状态送入状态汇总层。
+    bMoldAdjustAlarm := bMoldAdjustAlarm,             // 把调模块 Alarm 状态送入状态汇总层。
+    dwMoldAdjustAlarmID := dwMoldAdjustAlarmID,       // 把调模块报警码送入状态汇总层。
+    uiMoldAdjustActHint := uiMoldAdjustActHint,       // 把调模块动作提示号送入状态汇总层。
+    uiMoldAdjustActTime := uiMoldAdjustActTime,       // 把调模块动作持续时间送入状态汇总层。
+    bMoldAdjustIned := bMoldAdjustIned,               // 把调模进到位状态送入状态汇总层。
+    bMoldAdjustOuted := bMoldAdjustOuted,             // 把调模退到位状态送入状态汇总层。
+    bNozzleBusy := bNozzleBusy,                       // 把座台模块 Busy 状态送入状态汇总层。
+    bNozzleDone := bNozzleDone,                       // 把座台模块 Done 状态送入状态汇总层。
+    bNozzleAlarm := bNozzleAlarm,                     // 把座台模块 Alarm 状态送入状态汇总层。
+    dwNozzleAlarmID := dwNozzleAlarmID,               // 把座台模块报警码送入状态汇总层。
+    uiNozzleActHint := uiNozzleActHint,               // 把座台模块动作提示号送入状态汇总层。
+    uiNozzleActTime := uiNozzleActTime,               // 把座台模块动作持续时间送入状态汇总层。
+    bNozzleIned := bNozzleIned,                       // 把座进到位状态送入状态汇总层。
+    bNozzleOuted := bNozzleOuted,                     // 把座退到位状态送入状态汇总层。
+    bInjectBusy := bInjectBusy,                       // 把射胶模块 Busy 状态送入状态汇总层。
+    bInjectDone := bInjectDone,                       // 把射胶模块 Done 状态送入状态汇总层。
+    bInjectAlarm := bInjectAlarm,                     // 把射胶模块 Alarm 状态送入状态汇总层。
+    dwInjectAlarmID := dwInjectAlarmID,               // 把射胶模块报警码送入状态汇总层。
+    uiInjectActHint := uiInjectActHint,               // 把射胶模块动作提示号送入状态汇总层。
+    uiInjectActTime := uiInjectActTime,               // 把射胶模块动作持续时间送入状态汇总层。
+    bInjected := bInjected,                           // 把射出完成状态送入状态汇总层。
+    bHeld := bHeld,                                   // 把保压完成状态送入状态汇总层。
+    bSuckBacked := bSuckBacked,                       // 把射退完成状态送入状态汇总层。
+    bMeterBusy := bMeterBusy,                         // 把储料模块 Busy 状态送入状态汇总层。
+    bMeterDone := bMeterDone,                         // 把储料模块 Done 状态送入状态汇总层。
+    bMeterAlarm := bMeterAlarm,                       // 把储料模块 Alarm 状态送入状态汇总层。
+    dwMeterAlarmID := dwMeterAlarmID,                 // 把储料模块报警码送入状态汇总层。
+    uiMeterActHint := uiMeterActHint,                 // 把储料模块动作提示号送入状态汇总层。
+    uiMeterActTime := uiMeterActTime,                 // 把储料模块动作持续时间送入状态汇总层。
+    bMetered := bMetered,                             // 把储料完成状态送入状态汇总层。
+    bUseEjectModeManual := bUseEjectModeManual,       // 把当前托模来源选择结果送入状态汇总层。
+    bSelectedEjectBusy := bSelectedEjectBusy,         // 把当前托模来源 Busy 状态送入状态汇总层。
+    bSelectedEjectDone := bSelectedEjectDone,         // 把当前托模来源 Done 状态送入状态汇总层。
+    bSelectedEjectAlarm := bSelectedEjectAlarm,       // 把当前托模来源 Alarm 状态送入状态汇总层。
+    dwSelectedEjectAlarmID := dwSelectedEjectAlarmID, // 把当前托模来源报警码送入状态汇总层。
+    uiSelectedEjectActHint := uiSelectedEjectActHint, // 把当前托模来源动作提示号送入状态汇总层。
+    uiSelectedEjectActTime := uiSelectedEjectActTime, // 把当前托模来源动作持续时间送入状态汇总层。
+    bSelectedEjectIned := bSelectedEjectIned,         // 把当前托模来源内位到位状态送入状态汇总层。
+    bSelectedEjectOuted := bSelectedEjectOuted,       // 把当前托模来源外位到位状态送入状态汇总层。
+    bCoreBusy := bCoreBusy,                           // 把中子模块 Busy 状态送入状态汇总层。
+    bCoreDone := bCoreDone,                           // 把中子模块 Done 状态送入状态汇总层。
+    bCoreAlarm := bCoreAlarm,                         // 把中子模块 Alarm 状态送入状态汇总层。
+    dwCoreAlarmID := dwCoreAlarmID,                   // 把中子模块报警码送入状态汇总层。
+    uiCoreActHint := uiCoreActHint,                   // 把中子模块动作提示号送入状态汇总层。
+    uiCoreActTime := uiCoreActTime,                   // 把中子模块动作持续时间送入状态汇总层。
+    bCoreIned := bCoreIned,                           // 把中子进到位状态送入状态汇总层。
+    bCoreOuted := bCoreOuted,                         // 把中子退到位状态送入状态汇总层。
+    stStatus => stStatus                              // 回收汇总后的机器级总状态，供顶层与 HMI 统一读取。
+);
 END_FUNCTION_BLOCK

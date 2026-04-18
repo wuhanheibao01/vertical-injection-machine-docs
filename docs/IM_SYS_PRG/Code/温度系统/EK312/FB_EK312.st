@@ -7,14 +7,14 @@
 
   说明：
   1. 当前实现是控制/仿真一体化逻辑，便于在无真实温控器时联调主控。
-  2. `PROGRAM PRG_MainControl` 必须持续以 1ms 基础任务调用本块，并在 `bLogicTick100msIn` 上提供固定 100ms 温控刷新拍。
-  3. 若后续接入真实温控器，可保留本接口不变，仅替换内部驱动实现。
+  2. 若后续接入真实温控器，可保留本接口不变，仅替换内部驱动实现。
 *)
 FUNCTION_BLOCK FB_EK312
 VAR_INPUT
     bStart: BOOL;                 // TRUE=启动温控；顶层保持该命令后，本块开始进入升温状态机。
     bStop: BOOL;                  // TRUE=停止温控；无论是否命中 100ms 刷新拍，都必须立即撤销执行态。
     bReset: BOOL;                 // TRUE=复位温控状态；无论是否命中 100ms 刷新拍，都必须立即回到安全初值。
+    bLogicTick100msIn: BOOL;      // TRUE=当前扫描周期命中一次顶层 100ms 温控刷新拍；本块只在该拍执行一轮温度计算。
     bR0: BOOL;                    // 人工直接加热组 0，对应第 1~3 段。
     bR1: BOOL;                    // 人工直接加热组 1，对应第 4~6 段。
     bR2: BOOL;                    // 人工直接加热组 2，对应第 7~9 段。
@@ -61,8 +61,8 @@ ELSIF bStop THEN
     bDone := FALSE;                            // 停止时立即清除完成态。
     uiHeatState := 0;                          // 停止时把热状态恢复为停止。
     bAllReady := FALSE;                        // 停止时清空“全部就绪”缓存，避免停止后仍显示已就绪。
-    FOR uiCycle := 1 TO 12 DO
-        stOutPara.aOutputAddr[uiCycle] := 0;   // 停止时撤销前 12 路加热输出。
+    FOR uiCycle := 1 TO 100 DO
+        stOutPara.aOutputAddr[uiCycle] := 0;   // 停止时撤销全部温控输出地址镜像，避免旧输出残留到下次启动。
     END_FOR;
 ELSE
     CASE eState OF
@@ -73,8 +73,8 @@ ELSE
             dwAlarmID := 0;                    // 空闲态清空报警码。
             uiHeatState := 0;                  // 空闲态显示为停止。
             bAllReady := FALSE;                // 空闲态清空“全部就绪”缓存，等待下次启动重新计算。
-            FOR uiCycle := 1 TO 12 DO
-                stOutPara.aOutputAddr[uiCycle] := 0; // 空闲态持续关闭所有加热输出。
+            FOR uiCycle := 1 TO 100 DO
+                stOutPara.aOutputAddr[uiCycle] := 0; // 空闲态持续关闭全部温控输出地址镜像，避免未使用地址保留旧值。
             END_FOR;
             IF bStart THEN
                 eState := eState_Init;         // 收到启动命令后转入初始化态，为进入升温态准备初值。
@@ -161,8 +161,8 @@ ELSE
                 uiHeatState := 1;                  // 只要最近一次计算仍有段未就绪，就保持热状态为升温中。
             END_IF;
 
-            IF dwAlarmID = DWORD#16#0001 THEN
-                eState := eState_Error;           // 一旦检测到超温报警，立即切入故障态等待外部复位。
+            IF (dwAlarmID AND DWORD#16#0001) <> DWORD#0 THEN
+                eState := eState_Error;           // 只要报警码里包含超温位，就立即切入故障态等待外部复位。
             END_IF;
 
         eState_Error:
@@ -172,8 +172,8 @@ ELSE
             bDone := FALSE;                       // 故障态明确撤销就绪完成标志。
             uiHeatState := 0;                     // 故障态对外显示为停止，由报警位单独提示异常。
             bAllReady := FALSE;                   // 故障态清空“全部就绪”缓存，避免错误显示温控已就绪。
-            FOR uiCycle := 1 TO 12 DO
-                stOutPara.aOutputAddr[uiCycle] := 0; // 故障态切断前 12 路加热输出。
+            FOR uiCycle := 1 TO 100 DO
+                stOutPara.aOutputAddr[uiCycle] := 0; // 故障态切断全部温控输出地址镜像，避免报警后仍残留旧输出。
             END_FOR;
 
     ELSE

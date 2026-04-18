@@ -13,9 +13,33 @@
 
 TYPE ST_PanelButton :
 STRUCT
-    uiPanelOrder: UINT;     // 当前逻辑键在当前面板型号中的排序号；`0` 表示该面板型号不提供此键位。
-    bValue: BOOL;           // 当前逻辑键输入值；由面板功能块根据输入字和排序号解码后回写。
-    bLamp: BOOL;            // 当前逻辑键灯输出请求；由上层写入，再由面板功能块按排序号编码到输出字。
+    uiPanelOrder: UINT;         // 当前逻辑键在当前面板型号中的逻辑排序号；`0` 表示该面板型号不提供此键位。
+    uiInputWordIndex: UINT;     // 当前逻辑键真实来自哪个输入字；`0..3` 分别对应 `uiIN0..uiIN3`，超出 `0..3` 表示无效映射。
+    uiInputBitIndex: UINT;      // 当前逻辑键在输入字中的真实位号；`0..15` 有效，超出 `0..15` 表示无效映射。
+    bValue: BOOL;               // 当前逻辑键输入值；由面板功能块按“输入字号 + 输入位号”显式解码后回写。
+    bLamp: BOOL;                // 当前逻辑键灯输出请求；由上层写入，再由面板功能块按 `uiPanelOrder` 编码到输出字。
+END_STRUCT
+END_TYPE
+
+TYPE E_PanelModel :
+(
+    ePanel_None,    // 未选择任何面板型号；顶层面板调度块只清零输出，不解码按键。
+    ePanel_MK110,   // 当前顶层接入的硬件面板为 MK110。
+    ePanel_MK116,   // 当前顶层接入的硬件面板为 MK116。
+    ePanel_MK150    // 当前顶层接入的硬件面板为 MK150。
+);
+END_TYPE
+
+TYPE ST_PanelIO :
+STRUCT
+    uiIN0: UINT;    // 面板原始输入字 0；由 IO 层或现场总线层回写。
+    uiIN1: UINT;    // 面板原始输入字 1；由 IO 层或现场总线层回写。
+    uiIN2: UINT;    // 面板原始输入字 2；由 IO 层或现场总线层回写。
+    uiIN3: UINT;    // 面板原始输入字 3；由 IO 层或现场总线层回写。
+    uiOUT0: UINT;   // 面板原始输出字 0；由面板调度块汇总后回写给 IO 层。
+    uiOUT1: UINT;   // 面板原始输出字 1；由面板调度块汇总后回写给 IO 层。
+    uiOUT2: UINT;   // 面板原始输出字 2；由面板调度块汇总后回写给 IO 层。
+    uiOUT3: UINT;   // 面板原始输出字 3；由面板调度块汇总后回写给 IO 层。
 END_STRUCT
 END_TYPE
 

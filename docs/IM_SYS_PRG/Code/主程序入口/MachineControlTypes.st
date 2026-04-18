@@ -56,7 +56,11 @@ END_TYPE
 
 TYPE ST_MachineCommand :
 STRUCT
-    (* 机器级公共命令。 *)
+    (* 机器级公共命令。
+       说明：
+       1. 该结构既可以作为单一命令源边界，也可以作为顶层仲裁后的最终机器命令边界。
+       2. 当前工程先接入面板命令源，再由 `FB_CommandArbiter` 统一生成最终 `gvl_stCommand`。
+    *)
     bStart: BOOL;               // 周期启动/当前模块启动
     bStop: BOOL;                // 正常停止
     bEStop: BOOL;               // 急停
@@ -82,6 +86,63 @@ STRUCT
        2. 调模模式只会读取其中与锁模调试、调模和温控相关的命令。
     *)
     stManual: ST_MachineManualCommand;
+END_STRUCT
+END_TYPE
+
+TYPE ST_MachineModeState :
+STRUCT
+    (* 机器当前模式解析结果。 *)
+    bManualModeActive: BOOL;       // TRUE=当前主控解析出的机器模式为手动模式。
+    bMoldAdjustModeActive: BOOL;   // TRUE=当前主控解析出的机器模式为调模模式。
+    bSemiAutoModeActive: BOOL;     // TRUE=当前主控解析出的机器模式为半自动模式。
+    bFullAutoModeActive: BOOL;     // TRUE=当前主控解析出的机器模式为全自动模式。
+    bModeChanged: BOOL;            // TRUE=本拍检测到机器模式发生切换，可用于打一拍总停止保护。
+    uiResolvedAutoMode: UINT;      // 自动流程专用模式号；0=非自动 1=半自动 2=全自动。
+    bGlobalStop: BOOL;             // 主控统一停止位；收口停机命令、停机模式和切模保护停止。
+END_STRUCT
+END_TYPE
+
+TYPE ST_MachineModuleCommands :
+STRUCT
+    (* 合模块最终命令。 *)
+    bClampStart: BOOL;             // TRUE=主控最终允许合模块启动当前动作。
+    bClampReset: BOOL;             // TRUE=主控最终要求合模块回到复位态。
+    uiClampMode: UINT;             // 主控最终下发给合模块的动作模式号。
+
+    (* 调模块最终命令。 *)
+    bMoldAdjustStart: BOOL;        // TRUE=主控最终允许调模块启动当前动作。
+    bMoldAdjustReset: BOOL;        // TRUE=主控最终要求调模块回到复位态。
+    uiMoldAdjustMode: UINT;        // 主控最终下发给调模块的动作模式号。
+
+    (* 座台模块最终命令。 *)
+    bNozzleStart: BOOL;            // TRUE=主控最终允许座台模块启动当前动作。
+    bNozzleReset: BOOL;            // TRUE=主控最终要求座台模块回到复位态。
+    uiNozzleMode: UINT;            // 主控最终下发给座台模块的动作模式号。
+
+    (* 射胶模块最终命令。 *)
+    bInjectStart: BOOL;            // TRUE=主控最终允许射胶模块启动当前动作。
+    bInjectReset: BOOL;            // TRUE=主控最终要求射胶模块回到复位态。
+    uiInjectMode: UINT;            // 主控最终下发给射胶模块的动作模式号。
+
+    (* 储料模块最终命令。 *)
+    bMeterStart: BOOL;             // TRUE=主控最终允许储料模块启动当前动作。
+    bMeterReset: BOOL;             // TRUE=主控最终要求储料模块回到复位态。
+
+    (* 基础托模块最终命令。 *)
+    bEjectStart: BOOL;             // TRUE=主控最终允许基础托模块启动当前动作。
+    bEjectReset: BOOL;             // TRUE=主控最终要求基础托模块回到复位态。
+    uiEjectMode: UINT;             // 主控最终下发给基础托模块的动作模式号。
+
+    (* 托模组合模式块最终命令。 *)
+    bEjectModeStart: BOOL;         // TRUE=主控最终允许托模组合模式块启动当前动作。
+    bEjectModeReset: BOOL;         // TRUE=主控最终要求托模组合模式块回到复位态。
+    uiEjectPatternMode: UINT;      // 主控最终下发给托模组合模式块的组合模式号。
+    uiEjectTimes: UINT;            // 主控最终下发给托模组合模式块的循环次数或震动次数。
+
+    (* 中子模块最终命令。 *)
+    bCoreStart: BOOL;              // TRUE=主控最终允许中子模块启动当前动作。
+    bCoreReset: BOOL;              // TRUE=主控最终要求中子模块回到复位态。
+    uiCoreMode: UINT;              // 主控最终下发给中子模块的动作模式号。
 END_STRUCT
 END_TYPE
 
