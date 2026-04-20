@@ -107,6 +107,53 @@ STRUCT
 END_STRUCT
 END_TYPE
 
+TYPE ST_ModuleCommandSource :
+STRUCT
+    (* 分模块命令源通用边界。
+       说明：
+       1. 该结构用于承载“某一个命令来源”给某一个执行模块下发的命令快照。
+       2. 手动/调模路由当前只会真实回写 `bStart` 与 `uiMode`；`bReset` 预留给自动流程或后续更高层命令源扩展。
+       3. `FB_MachineCommandComposer` 只负责在不同命令源集合之间做模式级仲裁，不再维护超长标量入参表。
+    *)
+    bStart: BOOL;                  // TRUE=该命令源要求模块启动当前动作。
+    bReset: BOOL;                  // TRUE=该命令源要求模块回到复位态；当前主要由自动流程使用。
+    uiMode: UINT;                  // 该命令源给模块下发的动作模式号；0 表示当前无有效动作。
+END_STRUCT
+END_TYPE
+
+TYPE ST_EjectModeCommandSource :
+STRUCT
+    (* 托模组合模式命令源边界。
+       说明：
+       1. 托模组合模式除了启动、复位和模式号外，还需要额外携带循环次数。
+       2. `uiMode` 当前沿用托模组合模式定义：1=定次 2=震动 3=停留。
+    *)
+    bStart: BOOL;                  // TRUE=该命令源要求托模组合模式块启动当前动作。
+    bReset: BOOL;                  // TRUE=该命令源要求托模组合模式块回到复位态。
+    uiMode: UINT;                  // 托模组合模式号；0 表示当前无有效组合动作。
+    uiTimes: UINT;                 // 定次/震动次数；震动模式下 0 可表示持续循环。
+END_STRUCT
+END_TYPE
+
+TYPE ST_MachineCommandSourceSet :
+STRUCT
+    (* 机器级命令源聚合结构。
+       说明：
+       1. 一套结构表示同一来源在所有模块上的命令输出快照。
+       2. 当前主控内部已显式使用两套来源：手动/调模路由结果与自动流程结果。
+       3. 后续若新增新的工艺编排来源，应优先扩展这里，而不是继续给 `FB_MachineCommandComposer` 追加标量参数。
+    *)
+    stClamp: ST_ModuleCommandSource;        // 合模块命令源快照。
+    stMoldAdjust: ST_ModuleCommandSource;   // 调模块命令源快照。
+    stNozzle: ST_ModuleCommandSource;       // 座台模块命令源快照。
+    stInject: ST_ModuleCommandSource;       // 射胶模块命令源快照。
+    stMeter: ST_ModuleCommandSource;        // 储料模块命令源快照。
+    stEject: ST_ModuleCommandSource;        // 基础托模块命令源快照。
+    stEjectMode: ST_EjectModeCommandSource; // 托模组合模式块命令源快照。
+    stCore: ST_ModuleCommandSource;         // 中子模块命令源快照。
+END_STRUCT
+END_TYPE
+
 TYPE ST_MachineModuleCommands :
 STRUCT
     (* 合模块最终命令。 *)
@@ -153,7 +200,11 @@ END_TYPE
 
 TYPE ST_MachineSensor :
 STRUCT
-    (* 机器公共条件。自动流程会优先检查这些前提是否满足。 *)
+    (* 机器公共条件。自动流程会优先检查这些前提是否满足。
+       说明：
+       1. 当前结构只保留已经确认存在真实数字量输入来源的机器语义字段。
+       2. 电子尺、压力尺以及轴实际位置/速度/压力等数值反馈不再放在这里维护。
+    *)
     bDoorClosed: BOOL;
     bHydReady: BOOL;
     bSystemNoAlarm: BOOL;
@@ -163,8 +214,6 @@ STRUCT
     bCloseLowPres: BOOL;
     bCloseHighPres: BOOL;
     bCloseStop: BOOL;
-    udiClampElecRulerVal: UDINT;
-    uiClampPresElecRulerVal: UINT;
 
     (* 调模模块过程信号。 *)
     bMoldAdjustInStop: BOOL;
@@ -173,7 +222,6 @@ STRUCT
     (* 座台模块过程信号。 *)
     bNozzleInStop: BOOL;
     bNozzleOutStop: BOOL;
-    udiNozzleElecRulerVal: UDINT;
 
     (* 射胶与储料模块过程信号。 *)
     bInjSeg1Stop: BOOL;
@@ -181,47 +229,14 @@ STRUCT
     bInjStop: BOOL;
     bSuckBackStop: BOOL;
     bMeterStop: BOOL;
-    udiInjElecRulerVal: UDINT;
 
     (* 托模模块过程信号。 *)
     bEjectInStop: BOOL;
     bEjectOutStop: BOOL;
-    udiEjectElecRulerVal: UDINT;
 
     (* 中子模块过程信号。 *)
     bCoreInStop: BOOL;
     bCoreOutStop: BOOL;
-
-    (* 轴反馈。
-       这些反馈值会经由子模块接口写回各自的 `ST_AxisRefHyd`，让模块层同时看到“设定值”和“实际值”。
-    *)
-    rClampActualPosition: LREAL;
-    rClampActualVelocity: LREAL;
-    rClampActualPressure: LREAL;
-
-    rMoldAdjustActualPosition: LREAL;
-    rMoldAdjustActualVelocity: LREAL;
-    rMoldAdjustActualPressure: LREAL;
-
-    rNozzleActualPosition: LREAL;
-    rNozzleActualVelocity: LREAL;
-    rNozzleActualPressure: LREAL;
-
-    rInjectActualPosition: LREAL;
-    rInjectActualVelocity: LREAL;
-    rInjectActualPressure: LREAL;
-
-    rMeterActualPosition: LREAL;
-    rMeterActualVelocity: LREAL;
-    rMeterActualPressure: LREAL;
-
-    rEjectActualPosition: LREAL;
-    rEjectActualVelocity: LREAL;
-    rEjectActualPressure: LREAL;
-
-    rCoreActualPosition: LREAL;
-    rCoreActualVelocity: LREAL;
-    rCoreActualPressure: LREAL;
 END_STRUCT
 END_TYPE
 
@@ -307,6 +322,99 @@ STRUCT
     uiRecipeVersion: UINT;        // 当前 HMI 缓冲区版本号镜像
     sRecipeName: STRING[40];      // 当前 HMI 缓冲区名称镜像
     bDirty: BOOL;                 // 当前 HMI 缓冲区脏标记镜像
+END_STRUCT
+END_TYPE
+
+TYPE ST_ModuleRuntimeStatus :
+STRUCT
+    (* 分模块运行时通用状态边界。
+       说明：
+       1. 该结构收口所有执行模块和自动流程都共享的 Busy/Done/Alarm/ActHint 字段。
+       2. 业务语义更强的到位位、完成位和附加统计量，应由外层模块包装结构继续补充。
+       3. `FB_MachineStatusAggregator` 只消费这类聚合结构，不再维护超长标量状态入参表。
+    *)
+    bBusy: BOOL;                   // TRUE=当前模块或流程正在执行动作。
+    bDone: BOOL;                   // TRUE=当前模块或流程已完成本轮动作。
+    bAlarm: BOOL;                  // TRUE=当前模块或流程处于报警态。
+    dwAlarmID: DWORD;              // 当前模块或流程的报警码；无报警时应为 0。
+    uiActHint: UINT;               // 当前模块或流程动作提示号；供顶层输出映射和 HMI 直接消费。
+    uiActTime: UINT;               // 当前动作已持续的时间；单位由各模块内部定义，当前统一按秒镜像。
+END_STRUCT
+END_TYPE
+
+TYPE ST_AutoCycleRuntimeStatus :
+STRUCT
+    (* 自动流程运行时状态边界。 *)
+    stRuntime: ST_ModuleRuntimeStatus; // 自动流程通用运行状态。
+    uiCycleCount: UINT;                // 自动流程累计循环次数。
+END_STRUCT
+END_TYPE
+
+TYPE ST_ClampModuleRuntimeStatus :
+STRUCT
+    (* 合模块运行时状态边界。 *)
+    stRuntime: ST_ModuleRuntimeStatus; // 合模块通用运行状态。
+    bMoldOpened: BOOL;                 // TRUE=当前已检测到开模到位。
+    bMoldClosed: BOOL;                 // TRUE=当前已检测到合模到位。
+END_STRUCT
+END_TYPE
+
+TYPE ST_MoldAdjustModuleRuntimeStatus :
+STRUCT
+    (* 调模块运行时状态边界。 *)
+    stRuntime: ST_ModuleRuntimeStatus; // 调模块通用运行状态。
+    bMoldAdjustIned: BOOL;             // TRUE=当前已检测到调模进到位。
+    bMoldAdjustOuted: BOOL;            // TRUE=当前已检测到调模退到位。
+END_STRUCT
+END_TYPE
+
+TYPE ST_NozzleModuleRuntimeStatus :
+STRUCT
+    (* 座台模块运行时状态边界。 *)
+    stRuntime: ST_ModuleRuntimeStatus; // 座台模块通用运行状态。
+    bNozzleIned: BOOL;                 // TRUE=当前已检测到座进到位。
+    bNozzleOuted: BOOL;                // TRUE=当前已检测到座退到位。
+END_STRUCT
+END_TYPE
+
+TYPE ST_InjectModuleRuntimeStatus :
+STRUCT
+    (* 射胶模块运行时状态边界。 *)
+    stRuntime: ST_ModuleRuntimeStatus; // 射胶模块通用运行状态。
+    bInjected: BOOL;                   // TRUE=当前已完成射出段。
+    bHeld: BOOL;                       // TRUE=当前已完成保压段。
+    bSuckBacked: BOOL;                 // TRUE=当前已完成射退段。
+END_STRUCT
+END_TYPE
+
+TYPE ST_MeterModuleRuntimeStatus :
+STRUCT
+    (* 储料模块运行时状态边界。 *)
+    stRuntime: ST_ModuleRuntimeStatus; // 储料模块通用运行状态。
+    bMetered: BOOL;                    // TRUE=当前已完成储料。
+END_STRUCT
+END_TYPE
+
+TYPE ST_EjectModuleRuntimeStatus :
+STRUCT
+    (* 托模模块运行时状态边界。
+       说明：
+       1. 同一结构既可表示基础托模块状态，也可表示托模组合模式块状态。
+       2. `bModeSelected` 只在主控层“已选中的托模状态”镜像中有效，基础块和模式块各自本体不依赖该字段。
+    *)
+    stRuntime: ST_ModuleRuntimeStatus; // 托模来源通用运行状态。
+    bEjectIned: BOOL;                  // TRUE=当前已检测到托模内位到位。
+    bEjectOuted: BOOL;                 // TRUE=当前已检测到托模外位到位。
+    bModeSelected: BOOL;               // TRUE=当前对外暴露的托模状态来自托模组合模式块。
+END_STRUCT
+END_TYPE
+
+TYPE ST_CoreModuleRuntimeStatus :
+STRUCT
+    (* 中子模块运行时状态边界。 *)
+    stRuntime: ST_ModuleRuntimeStatus; // 中子模块通用运行状态。
+    bCoreIned: BOOL;                   // TRUE=当前已检测到中子进到位。
+    bCoreOuted: BOOL;                  // TRUE=当前已检测到中子退到位。
 END_STRUCT
 END_TYPE
 

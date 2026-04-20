@@ -7,101 +7,31 @@
 *)
 FUNCTION_BLOCK FB_MachineStatusAggregator
 VAR_INPUT
-    stCommand: ST_MachineCommand;            // 顶层下发的最终机器命令；当前块只消费其中当前机器模式号。
-    stSensor: ST_MachineSensor;              // 顶层采集的现场条件与传感器；当前块用于计算自动准备就绪状态。
-    stModeState: ST_MachineModeState;        // 当前扫描周期解析出的模式状态结构；当前块用于汇总当前模式与自动模式号。
-
-    (* 自动流程状态。 *)
-    bAutoBusy: BOOL;                         // 自动流程 Busy 状态。
-    bAutoDone: BOOL;                         // 自动流程 Done 状态。
-    bAutoAlarm: BOOL;                        // 自动流程 Alarm 状态。
-    dwAutoAlarmID: DWORD;                    // 自动流程报警码。
-    uiAutoActHint: UINT;                     // 自动流程动作提示号。
-    uiAutoActTime: UINT;                     // 自动流程动作持续时间。
-    uiAutoCycleCount: UINT;                  // 自动流程累计循环次数。
-
-    (* 合模块状态。 *)
-    bClampBusy: BOOL;                        // 合模块 Busy 状态。
-    bClampDone: BOOL;                        // 合模块 Done 状态。
-    bClampAlarm: BOOL;                       // 合模块 Alarm 状态。
-    dwClampAlarmID: DWORD;                   // 合模块报警码。
-    uiClampActHint: UINT;                    // 合模块动作提示号。
-    uiClampActTime: UINT;                    // 合模块动作持续时间。
-    bMoldOpened: BOOL;                       // 合模块开模到位状态。
-    bMoldClosed: BOOL;                       // 合模块合模到位状态。
-
-    (* 调模块状态。 *)
-    bMoldAdjustBusy: BOOL;                   // 调模块 Busy 状态。
-    bMoldAdjustDone: BOOL;                   // 调模块 Done 状态。
-    bMoldAdjustAlarm: BOOL;                  // 调模块 Alarm 状态。
-    dwMoldAdjustAlarmID: DWORD;              // 调模块报警码。
-    uiMoldAdjustActHint: UINT;               // 调模块动作提示号。
-    uiMoldAdjustActTime: UINT;               // 调模块动作持续时间。
-    bMoldAdjustIned: BOOL;                   // 调模块进到位状态。
-    bMoldAdjustOuted: BOOL;                  // 调模块退到位状态。
-
-    (* 座台模块状态。 *)
-    bNozzleBusy: BOOL;                       // 座台模块 Busy 状态。
-    bNozzleDone: BOOL;                       // 座台模块 Done 状态。
-    bNozzleAlarm: BOOL;                      // 座台模块 Alarm 状态。
-    dwNozzleAlarmID: DWORD;                  // 座台模块报警码。
-    uiNozzleActHint: UINT;                   // 座台模块动作提示号。
-    uiNozzleActTime: UINT;                   // 座台模块动作持续时间。
-    bNozzleIned: BOOL;                       // 座台模块进到位状态。
-    bNozzleOuted: BOOL;                      // 座台模块退到位状态。
-
-    (* 射胶模块状态。 *)
-    bInjectBusy: BOOL;                       // 射胶模块 Busy 状态。
-    bInjectDone: BOOL;                       // 射胶模块 Done 状态。
-    bInjectAlarm: BOOL;                      // 射胶模块 Alarm 状态。
-    dwInjectAlarmID: DWORD;                  // 射胶模块报警码。
-    uiInjectActHint: UINT;                   // 射胶模块动作提示号。
-    uiInjectActTime: UINT;                   // 射胶模块动作持续时间。
-    bInjected: BOOL;                         // 射胶模块射出完成状态。
-    bHeld: BOOL;                             // 射胶模块保压完成状态。
-    bSuckBacked: BOOL;                       // 射胶模块射退完成状态。
-
-    (* 储料模块状态。 *)
-    bMeterBusy: BOOL;                        // 储料模块 Busy 状态。
-    bMeterDone: BOOL;                        // 储料模块 Done 状态。
-    bMeterAlarm: BOOL;                       // 储料模块 Alarm 状态。
-    dwMeterAlarmID: DWORD;                   // 储料模块报警码。
-    uiMeterActHint: UINT;                    // 储料模块动作提示号。
-    uiMeterActTime: UINT;                    // 储料模块动作持续时间。
-    bMetered: BOOL;                          // 储料模块储料完成状态。
-
-    (* 当前被选中的托模来源状态。 *)
-    bUseEjectModeManual: BOOL;               // TRUE=当前托模输出来自托模组合模式块，而不是基础托模块。
-    bSelectedEjectBusy: BOOL;                // 当前被选中的托模来源 Busy 状态。
-    bSelectedEjectDone: BOOL;                // 当前被选中的托模来源 Done 状态。
-    bSelectedEjectAlarm: BOOL;               // 当前被选中的托模来源 Alarm 状态。
-    dwSelectedEjectAlarmID: DWORD;           // 当前被选中的托模来源报警码。
-    uiSelectedEjectActHint: UINT;            // 当前被选中的托模来源动作提示号。
-    uiSelectedEjectActTime: UINT;            // 当前被选中的托模来源动作持续时间。
-    bSelectedEjectIned: BOOL;                // 当前被选中的托模来源内位到位状态。
-    bSelectedEjectOuted: BOOL;               // 当前被选中的托模来源外位到位状态。
-
-    (* 中子模块状态。 *)
-    bCoreBusy: BOOL;                         // 中子模块 Busy 状态。
-    bCoreDone: BOOL;                         // 中子模块 Done 状态。
-    bCoreAlarm: BOOL;                        // 中子模块 Alarm 状态。
-    dwCoreAlarmID: DWORD;                    // 中子模块报警码。
-    uiCoreActHint: UINT;                     // 中子模块动作提示号。
-    uiCoreActTime: UINT;                     // 中子模块动作持续时间。
-    bCoreIned: BOOL;                         // 中子模块进到位状态。
-    bCoreOuted: BOOL;                        // 中子模块退到位状态。
+    stCommand: ST_MachineCommand;                         // 顶层下发的最终机器命令；当前块只消费其中当前机器模式号。
+    stSensor: ST_MachineSensor;                           // 顶层采集的现场条件与传感器；当前块用于计算自动准备就绪状态。
+    stModeState: ST_MachineModeState;                     // 当前扫描周期解析出的模式状态结构；当前块用于汇总当前模式与自动模式号。
+    stAutoStatus: ST_AutoCycleRuntimeStatus;              // 自动流程运行时状态聚合结构。
+    stClampStatus: ST_ClampModuleRuntimeStatus;           // 合模块运行时状态聚合结构。
+    stMoldAdjustStatus: ST_MoldAdjustModuleRuntimeStatus; // 调模块运行时状态聚合结构。
+    stNozzleStatus: ST_NozzleModuleRuntimeStatus;         // 座台模块运行时状态聚合结构。
+    stInjectStatus: ST_InjectModuleRuntimeStatus;         // 射胶模块运行时状态聚合结构。
+    stMeterStatus: ST_MeterModuleRuntimeStatus;           // 储料模块运行时状态聚合结构。
+    stEjectStatus: ST_EjectModuleRuntimeStatus;           // 当前被选中的托模来源状态聚合结构。
+    stCoreStatus: ST_CoreModuleRuntimeStatus;             // 中子模块运行时状态聚合结构。
 END_VAR
 VAR_OUTPUT
-    stStatus: ST_MachineStatus;             // 汇总后的机器级总状态；供 HMI、上位机和顶层逻辑统一读取。
+    stStatus: ST_MachineStatus;                           // 汇总后的机器级总状态；供 HMI、上位机和顶层逻辑统一读取。
 END_VAR
 VAR
-    bAutoReadyLocal: BOOL := FALSE;         // 自动循环可启动条件综合结果；最终写入 `stStatus.bAutoReady`。
+    bAutoReadyLocal: BOOL := FALSE;                       // 自动循环可启动条件综合结果；最终写入 `stStatus.bAutoReady`。
 END_VAR
 
-bAutoReadyLocal := stSensor.bDoorClosed AND stSensor.bHydReady AND                           // 自动准备就绪必须满足门已关和液压已就绪两项基础前提。
-    stSensor.bSystemNoAlarm AND (NOT bClampAlarm) AND (NOT bMoldAdjustAlarm) AND            // 自动准备就绪还要求系统级与合模/调模块无报警。
-    (NOT bNozzleAlarm) AND (NOT bInjectAlarm) AND (NOT bMeterAlarm) AND                      // 自动准备就绪还要求座台/射胶/储料模块无报警。
-    (NOT bSelectedEjectAlarm) AND (NOT bCoreAlarm) AND (NOT bAutoAlarm);                     // 自动准备就绪还要求托模/中子/自动流程本身均无报警。
+bAutoReadyLocal := stSensor.bDoorClosed AND stSensor.bHydReady AND                                      // 自动准备就绪必须满足门已关和液压已就绪两项基础前提。
+    stSensor.bSystemNoAlarm AND (NOT stClampStatus.stRuntime.bAlarm) AND                               // 自动准备就绪还要求系统级与合模块无报警。
+    (NOT stMoldAdjustStatus.stRuntime.bAlarm) AND (NOT stNozzleStatus.stRuntime.bAlarm) AND            // 自动准备就绪还要求调模块与座台模块无报警。
+    (NOT stInjectStatus.stRuntime.bAlarm) AND (NOT stMeterStatus.stRuntime.bAlarm) AND                 // 自动准备就绪还要求射胶与储料模块无报警。
+    (NOT stEjectStatus.stRuntime.bAlarm) AND (NOT stCoreStatus.stRuntime.bAlarm) AND                   // 自动准备就绪还要求当前托模来源与中子模块无报警。
+    (NOT stAutoStatus.stRuntime.bAlarm);                                                                // 自动准备就绪还要求自动流程本身无报警。
 
 stStatus.uiMachineMode := stCommand.uiMachineMode;                               // 回写当前机器模式号，供 HMI 与上位机直接读取。
 stStatus.bManualModeActive := stModeState.bManualModeActive;                     // 回写当前是否处于手动模式。
@@ -109,92 +39,98 @@ stStatus.bMoldAdjustModeActive := stModeState.bMoldAdjustModeActive;            
 stStatus.bSemiAutoModeActive := stModeState.bSemiAutoModeActive;                 // 回写当前是否处于半自动模式。
 stStatus.bFullAutoModeActive := stModeState.bFullAutoModeActive;                 // 回写当前是否处于全自动模式。
 stStatus.bAutoReady := bAutoReadyLocal;                                          // 回写自动准备就绪综合结果。
-stStatus.uiCycleCount := uiAutoCycleCount;                                       // 回写自动循环累计次数。
+stStatus.uiCycleCount := stAutoStatus.uiCycleCount;                              // 回写自动循环累计次数。
 
-stStatus.bAutoBusy := bAutoBusy;                                                 // 回写自动流程 Busy 状态。
-stStatus.bAutoDone := bAutoDone;                                                 // 回写自动流程 Done 状态。
-stStatus.bAutoAlarm := bAutoAlarm;                                               // 回写自动流程 Alarm 状态。
-stStatus.dwAutoAlarmID := dwAutoAlarmID;                                         // 回写自动流程报警码。
+stStatus.bAutoBusy := stAutoStatus.stRuntime.bBusy;                              // 回写自动流程 Busy 状态。
+stStatus.bAutoDone := stAutoStatus.stRuntime.bDone;                              // 回写自动流程 Done 状态。
+stStatus.bAutoAlarm := stAutoStatus.stRuntime.bAlarm;                            // 回写自动流程 Alarm 状态。
+stStatus.dwAutoAlarmID := stAutoStatus.stRuntime.dwAlarmID;                      // 回写自动流程报警码。
 
-stStatus.bClampBusy := bClampBusy;                                               // 回写合模块 Busy 状态。
-stStatus.bClampDone := bClampDone;                                               // 回写合模块 Done 状态。
-stStatus.bClampAlarm := bClampAlarm;                                             // 回写合模块 Alarm 状态。
-stStatus.dwClampAlarmID := dwClampAlarmID;                                       // 回写合模块报警码。
-stStatus.bMoldOpened := bMoldOpened;                                             // 回写开模到位状态。
-stStatus.bMoldClosed := bMoldClosed;                                             // 回写合模到位状态。
+stStatus.bClampBusy := stClampStatus.stRuntime.bBusy;                            // 回写合模块 Busy 状态。
+stStatus.bClampDone := stClampStatus.stRuntime.bDone;                            // 回写合模块 Done 状态。
+stStatus.bClampAlarm := stClampStatus.stRuntime.bAlarm;                          // 回写合模块 Alarm 状态。
+stStatus.dwClampAlarmID := stClampStatus.stRuntime.dwAlarmID;                    // 回写合模块报警码。
+stStatus.bMoldOpened := stClampStatus.bMoldOpened;                               // 回写开模到位状态。
+stStatus.bMoldClosed := stClampStatus.bMoldClosed;                               // 回写合模到位状态。
 
-stStatus.bMoldAdjustBusy := bMoldAdjustBusy;                                     // 回写调模块 Busy 状态。
-stStatus.bMoldAdjustDone := bMoldAdjustDone;                                     // 回写调模块 Done 状态。
-stStatus.bMoldAdjustAlarm := bMoldAdjustAlarm;                                   // 回写调模块 Alarm 状态。
-stStatus.dwMoldAdjustAlarmID := dwMoldAdjustAlarmID;                             // 回写调模块报警码。
-stStatus.bMoldAdjustIned := bMoldAdjustIned;                                     // 回写调模进到位状态。
-stStatus.bMoldAdjustOuted := bMoldAdjustOuted;                                   // 回写调模退到位状态。
+stStatus.bMoldAdjustBusy := stMoldAdjustStatus.stRuntime.bBusy;                  // 回写调模块 Busy 状态。
+stStatus.bMoldAdjustDone := stMoldAdjustStatus.stRuntime.bDone;                  // 回写调模块 Done 状态。
+stStatus.bMoldAdjustAlarm := stMoldAdjustStatus.stRuntime.bAlarm;                // 回写调模块 Alarm 状态。
+stStatus.dwMoldAdjustAlarmID := stMoldAdjustStatus.stRuntime.dwAlarmID;          // 回写调模块报警码。
+stStatus.bMoldAdjustIned := stMoldAdjustStatus.bMoldAdjustIned;                  // 回写调模进到位状态。
+stStatus.bMoldAdjustOuted := stMoldAdjustStatus.bMoldAdjustOuted;                // 回写调模退到位状态。
 
-stStatus.bNozzleBusy := bNozzleBusy;                                             // 回写座台模块 Busy 状态。
-stStatus.bNozzleDone := bNozzleDone;                                             // 回写座台模块 Done 状态。
-stStatus.bNozzleAlarm := bNozzleAlarm;                                           // 回写座台模块 Alarm 状态。
-stStatus.dwNozzleAlarmID := dwNozzleAlarmID;                                     // 回写座台模块报警码。
-stStatus.bNozzleIned := bNozzleIned;                                             // 回写座进到位状态。
-stStatus.bNozzleOuted := bNozzleOuted;                                           // 回写座退到位状态。
+stStatus.bNozzleBusy := stNozzleStatus.stRuntime.bBusy;                          // 回写座台模块 Busy 状态。
+stStatus.bNozzleDone := stNozzleStatus.stRuntime.bDone;                          // 回写座台模块 Done 状态。
+stStatus.bNozzleAlarm := stNozzleStatus.stRuntime.bAlarm;                        // 回写座台模块 Alarm 状态。
+stStatus.dwNozzleAlarmID := stNozzleStatus.stRuntime.dwAlarmID;                  // 回写座台模块报警码。
+stStatus.bNozzleIned := stNozzleStatus.bNozzleIned;                              // 回写座进到位状态。
+stStatus.bNozzleOuted := stNozzleStatus.bNozzleOuted;                            // 回写座退到位状态。
 
-stStatus.bInjectBusy := bInjectBusy;                                             // 回写射胶模块 Busy 状态。
-stStatus.bInjectDone := bInjectDone;                                             // 回写射胶模块 Done 状态。
-stStatus.bInjectAlarm := bInjectAlarm;                                           // 回写射胶模块 Alarm 状态。
-stStatus.dwInjectAlarmID := dwInjectAlarmID;                                     // 回写射胶模块报警码。
-stStatus.bInjected := bInjected;                                                 // 回写射出完成状态。
-stStatus.bHeld := bHeld;                                                         // 回写保压完成状态。
-stStatus.bSuckBacked := bSuckBacked;                                             // 回写射退完成状态。
+stStatus.bInjectBusy := stInjectStatus.stRuntime.bBusy;                          // 回写射胶模块 Busy 状态。
+stStatus.bInjectDone := stInjectStatus.stRuntime.bDone;                          // 回写射胶模块 Done 状态。
+stStatus.bInjectAlarm := stInjectStatus.stRuntime.bAlarm;                        // 回写射胶模块 Alarm 状态。
+stStatus.dwInjectAlarmID := stInjectStatus.stRuntime.dwAlarmID;                  // 回写射胶模块报警码。
+stStatus.bInjected := stInjectStatus.bInjected;                                  // 回写射出完成状态。
+stStatus.bHeld := stInjectStatus.bHeld;                                          // 回写保压完成状态。
+stStatus.bSuckBacked := stInjectStatus.bSuckBacked;                              // 回写射退完成状态。
 
-stStatus.bMeterBusy := bMeterBusy;                                               // 回写储料模块 Busy 状态。
-stStatus.bMeterDone := bMeterDone;                                               // 回写储料模块 Done 状态。
-stStatus.bMeterAlarm := bMeterAlarm;                                             // 回写储料模块 Alarm 状态。
-stStatus.dwMeterAlarmID := dwMeterAlarmID;                                       // 回写储料模块报警码。
-stStatus.bMetered := bMetered;                                                   // 回写储料完成状态。
+stStatus.bMeterBusy := stMeterStatus.stRuntime.bBusy;                            // 回写储料模块 Busy 状态。
+stStatus.bMeterDone := stMeterStatus.stRuntime.bDone;                            // 回写储料模块 Done 状态。
+stStatus.bMeterAlarm := stMeterStatus.stRuntime.bAlarm;                          // 回写储料模块 Alarm 状态。
+stStatus.dwMeterAlarmID := stMeterStatus.stRuntime.dwAlarmID;                    // 回写储料模块报警码。
+stStatus.bMetered := stMeterStatus.bMetered;                                     // 回写储料完成状态。
 
-stStatus.bEjectModeSelected := bUseEjectModeManual;                              // 回写当前托模输出是否来自托模组合模式块。
-stStatus.bEjectBusy := bSelectedEjectBusy;                                       // 回写当前托模来源 Busy 状态。
-stStatus.bEjectDone := bSelectedEjectDone;                                       // 回写当前托模来源 Done 状态。
-stStatus.bEjectAlarm := bSelectedEjectAlarm;                                     // 回写当前托模来源 Alarm 状态。
-stStatus.dwEjectAlarmID := dwSelectedEjectAlarmID;                               // 回写当前托模来源报警码。
-stStatus.bEjectIned := bSelectedEjectIned;                                       // 回写当前托模来源内位到位状态。
-stStatus.bEjectOuted := bSelectedEjectOuted;                                     // 回写当前托模来源外位到位状态。
+stStatus.bEjectModeSelected := stEjectStatus.bModeSelected;                      // 回写当前托模输出是否来自托模组合模式块。
+stStatus.bEjectBusy := stEjectStatus.stRuntime.bBusy;                            // 回写当前托模来源 Busy 状态。
+stStatus.bEjectDone := stEjectStatus.stRuntime.bDone;                            // 回写当前托模来源 Done 状态。
+stStatus.bEjectAlarm := stEjectStatus.stRuntime.bAlarm;                          // 回写当前托模来源 Alarm 状态。
+stStatus.dwEjectAlarmID := stEjectStatus.stRuntime.dwAlarmID;                    // 回写当前托模来源报警码。
+stStatus.bEjectIned := stEjectStatus.bEjectIned;                                 // 回写当前托模来源内位到位状态。
+stStatus.bEjectOuted := stEjectStatus.bEjectOuted;                               // 回写当前托模来源外位到位状态。
 
-stStatus.bCoreBusy := bCoreBusy;                                                 // 回写中子模块 Busy 状态。
-stStatus.bCoreDone := bCoreDone;                                                 // 回写中子模块 Done 状态。
-stStatus.bCoreAlarm := bCoreAlarm;                                               // 回写中子模块 Alarm 状态。
-stStatus.dwCoreAlarmID := dwCoreAlarmID;                                         // 回写中子模块报警码。
-stStatus.bCoreIned := bCoreIned;                                                 // 回写中子进到位状态。
-stStatus.bCoreOuted := bCoreOuted;                                               // 回写中子退到位状态。
+stStatus.bCoreBusy := stCoreStatus.stRuntime.bBusy;                              // 回写中子模块 Busy 状态。
+stStatus.bCoreDone := stCoreStatus.stRuntime.bDone;                              // 回写中子模块 Done 状态。
+stStatus.bCoreAlarm := stCoreStatus.stRuntime.bAlarm;                            // 回写中子模块 Alarm 状态。
+stStatus.dwCoreAlarmID := stCoreStatus.stRuntime.dwAlarmID;                      // 回写中子模块报警码。
+stStatus.bCoreIned := stCoreStatus.bCoreIned;                                    // 回写中子进到位状态。
+stStatus.bCoreOuted := stCoreStatus.bCoreOuted;                                  // 回写中子退到位状态。
 
-stStatus.bMachineBusy := bAutoBusy OR bClampBusy OR bMoldAdjustBusy OR bNozzleBusy OR bInjectBusy OR // 汇总整机 Busy 状态。
-    bMeterBusy OR bSelectedEjectBusy OR bCoreBusy;
+stStatus.bMachineBusy := stAutoStatus.stRuntime.bBusy OR stClampStatus.stRuntime.bBusy OR // 汇总整机 Busy 状态。
+    stMoldAdjustStatus.stRuntime.bBusy OR stNozzleStatus.stRuntime.bBusy OR
+    stInjectStatus.stRuntime.bBusy OR stMeterStatus.stRuntime.bBusy OR
+    stEjectStatus.stRuntime.bBusy OR stCoreStatus.stRuntime.bBusy;
 
 IF stModeState.uiResolvedAutoMode > 0 THEN
-    stStatus.bMachineDone := bAutoDone;                                           // 自动模式下，整机 Done 直接跟随自动流程 Done。
+    stStatus.bMachineDone := stAutoStatus.stRuntime.bDone;                        // 自动模式下，整机 Done 直接跟随自动流程 Done。
 ELSE
-    stStatus.bMachineDone := bClampDone OR bMoldAdjustDone OR bNozzleDone OR bInjectDone OR // 非自动模式下，只要任一模块完成就对外回写 Done。
-        bMeterDone OR bSelectedEjectDone OR bCoreDone;
+    stStatus.bMachineDone := stClampStatus.stRuntime.bDone OR stMoldAdjustStatus.stRuntime.bDone OR // 非自动模式下，只要任一模块完成就对外回写 Done。
+        stNozzleStatus.stRuntime.bDone OR stInjectStatus.stRuntime.bDone OR
+        stMeterStatus.stRuntime.bDone OR stEjectStatus.stRuntime.bDone OR
+        stCoreStatus.stRuntime.bDone;
 END_IF;
 
-stStatus.bMachineAlarm := bAutoAlarm OR bClampAlarm OR bMoldAdjustAlarm OR bNozzleAlarm OR // 汇总整机 Alarm 状态。
-    bInjectAlarm OR bMeterAlarm OR bSelectedEjectAlarm OR bCoreAlarm;
+stStatus.bMachineAlarm := stAutoStatus.stRuntime.bAlarm OR stClampStatus.stRuntime.bAlarm OR // 汇总整机 Alarm 状态。
+    stMoldAdjustStatus.stRuntime.bAlarm OR stNozzleStatus.stRuntime.bAlarm OR
+    stInjectStatus.stRuntime.bAlarm OR stMeterStatus.stRuntime.bAlarm OR
+    stEjectStatus.stRuntime.bAlarm OR stCoreStatus.stRuntime.bAlarm;
 
-IF bAutoAlarm THEN
-    stStatus.dwMachineAlarmID := dwAutoAlarmID;                                   // 自动流程报警优先作为整机最高优先级报警号。
-ELSIF bClampAlarm THEN
-    stStatus.dwMachineAlarmID := dwClampAlarmID;                                  // 合模块报警次优先作为整机报警号。
-ELSIF bMoldAdjustAlarm THEN
-    stStatus.dwMachineAlarmID := dwMoldAdjustAlarmID;                             // 调模块报警作为整机报警号。
-ELSIF bNozzleAlarm THEN
-    stStatus.dwMachineAlarmID := dwNozzleAlarmID;                                 // 座台模块报警作为整机报警号。
-ELSIF bInjectAlarm THEN
-    stStatus.dwMachineAlarmID := dwInjectAlarmID;                                 // 射胶模块报警作为整机报警号。
-ELSIF bMeterAlarm THEN
-    stStatus.dwMachineAlarmID := dwMeterAlarmID;                                  // 储料模块报警作为整机报警号。
-ELSIF bSelectedEjectAlarm THEN
-    stStatus.dwMachineAlarmID := dwSelectedEjectAlarmID;                          // 当前托模来源报警作为整机报警号。
-ELSIF bCoreAlarm THEN
-    stStatus.dwMachineAlarmID := dwCoreAlarmID;                                   // 中子模块报警作为整机报警号。
+IF stAutoStatus.stRuntime.bAlarm THEN
+    stStatus.dwMachineAlarmID := stAutoStatus.stRuntime.dwAlarmID;                // 自动流程报警优先作为整机最高优先级报警号。
+ELSIF stClampStatus.stRuntime.bAlarm THEN
+    stStatus.dwMachineAlarmID := stClampStatus.stRuntime.dwAlarmID;               // 合模块报警次优先作为整机报警号。
+ELSIF stMoldAdjustStatus.stRuntime.bAlarm THEN
+    stStatus.dwMachineAlarmID := stMoldAdjustStatus.stRuntime.dwAlarmID;          // 调模块报警作为整机报警号。
+ELSIF stNozzleStatus.stRuntime.bAlarm THEN
+    stStatus.dwMachineAlarmID := stNozzleStatus.stRuntime.dwAlarmID;              // 座台模块报警作为整机报警号。
+ELSIF stInjectStatus.stRuntime.bAlarm THEN
+    stStatus.dwMachineAlarmID := stInjectStatus.stRuntime.dwAlarmID;              // 射胶模块报警作为整机报警号。
+ELSIF stMeterStatus.stRuntime.bAlarm THEN
+    stStatus.dwMachineAlarmID := stMeterStatus.stRuntime.dwAlarmID;               // 储料模块报警作为整机报警号。
+ELSIF stEjectStatus.stRuntime.bAlarm THEN
+    stStatus.dwMachineAlarmID := stEjectStatus.stRuntime.dwAlarmID;               // 当前托模来源报警作为整机报警号。
+ELSIF stCoreStatus.stRuntime.bAlarm THEN
+    stStatus.dwMachineAlarmID := stCoreStatus.stRuntime.dwAlarmID;                // 中子模块报警作为整机报警号。
 ELSE
     stStatus.dwMachineAlarmID := DWORD#0;                                         // 无报警时清空整机报警号。
 END_IF;
@@ -203,29 +139,29 @@ END_IF;
 stStatus.uiMachineActHint := 0;                                                   // 每拍先清空整机动作提示号，随后按优先级回填。
 stStatus.uiMachineActTime := 0;                                                   // 每拍先清空整机动作持续时间，随后按优先级回填。
 
-IF (stModeState.uiResolvedAutoMode > 0) AND (bAutoBusy OR bAutoDone OR bAutoAlarm) THEN
-    stStatus.uiMachineActHint := uiAutoActHint;                                   // 自动模式有效且自动流程正在运行时，优先显示自动流程动作提示。
-    stStatus.uiMachineActTime := uiAutoActTime;                                   // 自动模式有效且自动流程正在运行时，优先显示自动流程动作时间。
-ELSIF bClampBusy OR bClampDone OR bClampAlarm THEN
-    stStatus.uiMachineActHint := uiClampActHint;                                  // 否则优先显示合模块动作提示。
-    stStatus.uiMachineActTime := uiClampActTime;                                  // 否则优先显示合模块动作时间。
-ELSIF bMoldAdjustBusy OR bMoldAdjustDone OR bMoldAdjustAlarm THEN
-    stStatus.uiMachineActHint := uiMoldAdjustActHint;                             // 再否则显示调模块动作提示。
-    stStatus.uiMachineActTime := uiMoldAdjustActTime;                             // 再否则显示调模块动作时间。
-ELSIF bNozzleBusy OR bNozzleDone OR bNozzleAlarm THEN
-    stStatus.uiMachineActHint := uiNozzleActHint;                                 // 再否则显示座台模块动作提示。
-    stStatus.uiMachineActTime := uiNozzleActTime;                                 // 再否则显示座台模块动作时间。
-ELSIF bInjectBusy OR bInjectDone OR bInjectAlarm THEN
-    stStatus.uiMachineActHint := uiInjectActHint;                                 // 再否则显示射胶模块动作提示。
-    stStatus.uiMachineActTime := uiInjectActTime;                                 // 再否则显示射胶模块动作时间。
-ELSIF bMeterBusy OR bMeterDone OR bMeterAlarm THEN
-    stStatus.uiMachineActHint := uiMeterActHint;                                  // 再否则显示储料模块动作提示。
-    stStatus.uiMachineActTime := uiMeterActTime;                                  // 再否则显示储料模块动作时间。
-ELSIF bSelectedEjectBusy OR bSelectedEjectDone OR bSelectedEjectAlarm THEN
-    stStatus.uiMachineActHint := uiSelectedEjectActHint;                          // 再否则显示当前托模来源动作提示。
-    stStatus.uiMachineActTime := uiSelectedEjectActTime;                          // 再否则显示当前托模来源动作时间。
-ELSIF bCoreBusy OR bCoreDone OR bCoreAlarm THEN
-    stStatus.uiMachineActHint := uiCoreActHint;                                   // 最后显示中子模块动作提示。
-    stStatus.uiMachineActTime := uiCoreActTime;                                   // 最后显示中子模块动作时间。
+IF (stModeState.uiResolvedAutoMode > 0) AND (stAutoStatus.stRuntime.bBusy OR stAutoStatus.stRuntime.bDone OR stAutoStatus.stRuntime.bAlarm) THEN
+    stStatus.uiMachineActHint := stAutoStatus.stRuntime.uiActHint;                // 自动模式有效且自动流程正在运行时，优先显示自动流程动作提示。
+    stStatus.uiMachineActTime := stAutoStatus.stRuntime.uiActTime;                // 自动模式有效且自动流程正在运行时，优先显示自动流程动作时间。
+ELSIF stClampStatus.stRuntime.bBusy OR stClampStatus.stRuntime.bDone OR stClampStatus.stRuntime.bAlarm THEN
+    stStatus.uiMachineActHint := stClampStatus.stRuntime.uiActHint;               // 否则优先显示合模块动作提示。
+    stStatus.uiMachineActTime := stClampStatus.stRuntime.uiActTime;               // 否则优先显示合模块动作时间。
+ELSIF stMoldAdjustStatus.stRuntime.bBusy OR stMoldAdjustStatus.stRuntime.bDone OR stMoldAdjustStatus.stRuntime.bAlarm THEN
+    stStatus.uiMachineActHint := stMoldAdjustStatus.stRuntime.uiActHint;          // 再否则显示调模块动作提示。
+    stStatus.uiMachineActTime := stMoldAdjustStatus.stRuntime.uiActTime;          // 再否则显示调模块动作时间。
+ELSIF stNozzleStatus.stRuntime.bBusy OR stNozzleStatus.stRuntime.bDone OR stNozzleStatus.stRuntime.bAlarm THEN
+    stStatus.uiMachineActHint := stNozzleStatus.stRuntime.uiActHint;              // 再否则显示座台模块动作提示。
+    stStatus.uiMachineActTime := stNozzleStatus.stRuntime.uiActTime;              // 再否则显示座台模块动作时间。
+ELSIF stInjectStatus.stRuntime.bBusy OR stInjectStatus.stRuntime.bDone OR stInjectStatus.stRuntime.bAlarm THEN
+    stStatus.uiMachineActHint := stInjectStatus.stRuntime.uiActHint;              // 再否则显示射胶模块动作提示。
+    stStatus.uiMachineActTime := stInjectStatus.stRuntime.uiActTime;              // 再否则显示射胶模块动作时间。
+ELSIF stMeterStatus.stRuntime.bBusy OR stMeterStatus.stRuntime.bDone OR stMeterStatus.stRuntime.bAlarm THEN
+    stStatus.uiMachineActHint := stMeterStatus.stRuntime.uiActHint;               // 再否则显示储料模块动作提示。
+    stStatus.uiMachineActTime := stMeterStatus.stRuntime.uiActTime;               // 再否则显示储料模块动作时间。
+ELSIF stEjectStatus.stRuntime.bBusy OR stEjectStatus.stRuntime.bDone OR stEjectStatus.stRuntime.bAlarm THEN
+    stStatus.uiMachineActHint := stEjectStatus.stRuntime.uiActHint;               // 再否则显示当前托模来源动作提示。
+    stStatus.uiMachineActTime := stEjectStatus.stRuntime.uiActTime;               // 再否则显示当前托模来源动作时间。
+ELSIF stCoreStatus.stRuntime.bBusy OR stCoreStatus.stRuntime.bDone OR stCoreStatus.stRuntime.bAlarm THEN
+    stStatus.uiMachineActHint := stCoreStatus.stRuntime.uiActHint;                // 最后显示中子模块动作提示。
+    stStatus.uiMachineActTime := stCoreStatus.stRuntime.uiActTime;                // 最后显示中子模块动作时间。
 END_IF;
 END_FUNCTION_BLOCK

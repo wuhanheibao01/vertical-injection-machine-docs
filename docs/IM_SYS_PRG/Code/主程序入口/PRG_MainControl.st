@@ -19,7 +19,7 @@ VAR
     uiLogicTickDiv: UINT := 0;                    // 10ms 逻辑节拍分频计数器，按 1ms 基础调用累加到第 10 拍后清零。
     bLogicTick10ms: BOOL := FALSE;                // TRUE=当前扫描周期命中一次 10ms 逻辑拍，允许主控刷新模式路由和自动流程。
     uiTempTickDiv: UINT := 0;                     // 100ms 温控节拍分频计数器，按 1ms 逻辑拍累加到第 100 拍后清零。
-    bTempTick100ms: BOOL := FALSE;               // TRUE=当前扫描周期命中一次 100ms 逻辑拍，允许温控系统刷新一轮计算。
+    bTempTick100ms: BOOL := FALSE;                // TRUE=当前扫描周期命中一次 100ms 逻辑拍，允许温控系统刷新一轮计算。
     stBaseCommandSnapshot: ST_MachineCommand;     // 当前扫描周期仲裁前的基础机器命令快照；用于保留尚未显式分配给独立命令源的剩余字段。
     stModuleCommandsMirror: ST_MachineModuleCommands; // 顶层缓存主控本拍最终模块命令镜像；供原始输出映射层直接消费。
     uiClampActHintMirror: UINT := 0;              // 顶层缓存合模块动作提示镜像；供原始输出映射层区分卸压、高压与普通合模。
@@ -53,16 +53,11 @@ gvl_fbPLCDigitalInputBinder(
     stPLC := gvl_PLC                          // 把全局原始 PLC IO 边界交给输入绑定块，统一从运行时 `IN[]` 刷新 `X*` 字段。
 );
 
-(* 原始输入刷新后，立即把 `X*` 点位翻译为机器语义传感器边界，供后续主控、面板和自动流程统一消费。 *)
+(* 原始输入刷新后，立即把 `X*` 点位与公共运行命令统一翻译为机器语义输入边界，供后续主控、面板和命令仲裁统一消费。 *)
 gvl_fbPLCMachineInputMapper(
     stPLC := gvl_PLC,                            // 把全局原始 PLC IO 边界交给输入语义映射块，读取本拍最新 `X*` 点位。
-    stSensor := gvl_stSensor                     // 把全局机器传感器边界交给输入语义映射块，回写门、限位、停止与液压就绪语义。
-);
-
-(* 原始输入刷新后，再把已经明确真实来源的公共运行命令翻译为独立命令源，供顶层仲裁块统一消费。 *)
-gvl_fbPLCMachineCommandMapper(
-    stPLC := gvl_PLC,                               // 把全局原始 PLC IO 边界交给公共命令映射块，读取本拍最新 `X50..X53` 点位。
-    stCommandSource := gvl_stPLCDigitalCommandSource // 把全局 PLC 数字量独立命令源交给映射块，回写公共启动/停止/复位/急停命令。
+    stSensor := gvl_stSensor,                    // 把全局机器传感器边界交给输入语义映射块，回写门、限位、停止与液压就绪语义。
+    stCommandSource := gvl_stPLCDigitalCommandSource // 把全局 PLC 数字量独立命令源交给输入语义映射块，回写公共启动/停止/复位/急停命令。
 );
 
 
