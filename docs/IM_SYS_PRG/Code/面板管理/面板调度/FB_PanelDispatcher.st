@@ -52,6 +52,11 @@ CASE ePanelModel OF
         fbMK150(
             stPanelButtons := stPanelButtons      // 把综合按键结构交给 MK150，写入 MK150 的逻辑排序号定义。
         );
+        
+    ePanel_MK2030:
+        fbMK2030(
+            stPanelButtons := stPanelButtons      // 把综合按键结构交给 MK2030，写入 MK2030 的逻辑排序号定义。
+        );
 ELSE
     stPanelIO.uiOUT0 := UINT#0;                   // 未选择任何面板型号时，强制清零输出字 0。
     stPanelIO.uiOUT1 := UINT#0;                   // 未选择任何面板型号时，强制清零输出字 1。

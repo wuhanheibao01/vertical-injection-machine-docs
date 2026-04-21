@@ -87,5 +87,5 @@ STRUCT
     (* 轴故障码。 *)
     nFaultCode: INT;             // 当前轴相关报警或故障码，允许模块层与轴层叠加写入。
 END_STRUCT
-
+END_TYPE
 

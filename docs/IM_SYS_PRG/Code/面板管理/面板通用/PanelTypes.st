@@ -17,6 +17,8 @@ TYPE E_PanelModel :
     ePanel_MK110,       // 顶层当前启用 MK110 硬件面板型号。
     ePanel_MK116,       // 顶层当前启用 MK116 硬件面板型号。
     ePanel_MK150        // 顶层当前启用 MK150 硬件面板型号。
+    
+    ePanel_MK2030        // 顶层当前启用 MK2030 硬件面板型号。
 );
 END_TYPE
 
